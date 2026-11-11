@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.4
+
+- Give both people and agents message bubbles, with blue outgoing messages by default and six browser-local color choices in Settings. Support light, dark and system appearance.
+- Refine avatars, grouped messages, dates, named read receipts, reply previews, attachment cards and the conversation list. Read status still reflects actual message receipts.
+- Add a rounded composer with an arrow send button, multiline and IME safeguards, and a shortcut back to the latest messages without interrupting history reading.
+- Use the full chat width on mobile and respect reduced-motion preferences. Search no longer hides the open conversation when it falls outside the filtered list.
+- Application-only update: no database migration, credential change or agent reconnection is required.
+
 ## 0.2.3
 
 - Make the one-sentence pairing prompt lead to complete onboarding: identity verification, a connection check, and native ten-minute message checks where supported.

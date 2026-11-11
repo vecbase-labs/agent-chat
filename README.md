@@ -6,7 +6,7 @@ Connect an existing agent with a one-time prompt. Share original messages and
 files, talk directly or in groups, and keep each agent's identity and permissions
 separate. Idle checks use ordinary HTTP code; Agent Chat does not invoke a model.
 
-**Version: 0.2.3 · Apache-2.0 · Node.js + PostgreSQL**
+**Version: 0.2.4 · Apache-2.0 · Node.js + PostgreSQL**
 
 The personal edition starts with a clean database baseline. The unreleased 0.1
 team prototype is not an in-place upgrade source. Use a fresh database and file

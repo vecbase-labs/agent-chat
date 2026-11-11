@@ -30,6 +30,7 @@ import { authClient } from '#/lib/auth-client'
 import { APP_VERSION } from '#/lib/version'
 import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH } from '#/lib/password-policy'
 import { ChatAvatar } from './avatar'
+import { AppearanceSettings } from './appearance'
 import type { Actor, Conversation } from '#/lib/types'
 
 type Enrollment = {
@@ -165,7 +166,7 @@ export function ManagementPage({
                   ? 'Give your agent a name and choose its groups.'
                   : mode === 'agents'
                     ? 'Connect the agents you already use.'
-                    : 'Your account and installation.'}
+                    : 'Make yourself at home.'}
             </p>
           </header>
           {error && (
@@ -427,6 +428,7 @@ export function ManagementPage({
             </div>
           ) : (
             <div className="max-w-2xl space-y-6">
+              <AppearanceSettings />
               <div className="rounded-xl border p-4">
                 <p className="font-medium">{actor.name}</p>
                 <p className="text-sm text-muted-foreground">Your account</p>

@@ -3,15 +3,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
   AtSign,
-  Check,
-  CheckCheck,
-  Download,
+  ArrowDown,
+  ArrowUp,
   File,
   Info,
   Loader2,
   Paperclip,
   Reply,
-  Send,
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -26,6 +24,7 @@ import {
 import { api, post } from '#/lib/api-client'
 import { cn } from '#/lib/utils'
 import { ChatAvatar } from './avatar'
+import { MessageBubble, dayLabel } from './message-bubble'
 import type { Actor, Attachment, Conversation, Message } from '#/lib/types'
 
 type Page = {
@@ -43,11 +42,6 @@ export function roomTitle(room: Conversation, actor: Actor) {
         .map((a) => a.name)
         .join(' & ') || 'Direct message'
     : room.name
-}
-function size(bytes: number) {
-  return bytes < 1024 * 1024
-    ? `${Math.ceil(bytes / 1024)} KB`
-    : `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 export function ChatWindow({
@@ -74,6 +68,8 @@ export function ChatWindow({
   const fileInput = useRef<HTMLInputElement>(null)
   const textarea = useRef<HTMLTextAreaElement>(null)
   const sticky = useRef(true)
+  const firstScroll = useRef(true)
+  const [awayFromBottom, setAwayFromBottom] = useState(false)
   const receivedIds = useRef(new Set<string>())
   const [draft, setDraft] = useState('')
   const [mentions, setMentions] = useState<string[]>([])
@@ -144,7 +140,16 @@ export function ChatWindow({
   }, [active, room.id, room.joined, onChanged])
   useEffect(() => {
     if (!active) return
-    if (sticky.current) bottom.current?.scrollIntoView({ behavior: 'instant' })
+    if (sticky.current && latest) {
+      bottom.current?.scrollIntoView({
+        behavior:
+          firstScroll.current ||
+          window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? 'instant'
+            : 'smooth',
+      })
+      firstScroll.current = false
+    }
     acknowledgeVisible()
   }, [active, latest, acknowledgeVisible])
   useEffect(() => {
@@ -185,13 +190,14 @@ export function ChatWindow({
       setReply(null)
       setFiles([])
       sticky.current = true
-      await messages.refetch()
+      setSending(false)
+      void messages.refetch()
       onChanged()
-      textarea.current?.focus()
+      requestAnimationFrame(() => textarea.current?.focus())
     } catch (err) {
       setError(
         (err instanceof Error ? err.message : 'Send failed.') +
-          ' Your message is kept here. Retry uses the same message key.',
+          ' Your message is still here. Try sending again.',
       )
     } finally {
       setSending(false)
@@ -230,10 +236,10 @@ export function ChatWindow({
   const other =
     room.kind === 'direct' ? room.members.find((a) => a.id !== actor.id) : null
   return (
-    <section className="flex h-full min-w-0 flex-1 flex-col bg-[var(--chat-surface)]">
+    <section className="relative flex h-full min-w-0 flex-1 flex-col bg-[var(--chat-surface)]">
       <header
         className={cn(
-          'flex min-h-16 shrink-0 items-center gap-3 bg-background px-4 md:px-7',
+          'chat-header flex min-h-[76px] shrink-0 items-center gap-3 px-4 md:px-7',
           sidebarHidden && 'md:pl-16',
         )}
       >
@@ -251,10 +257,10 @@ export function ChatWindow({
           kind={room.kind === 'group' ? 'group' : other?.kind}
         />
         <button onClick={onDetails} className="min-w-0 flex-1 text-left">
-          <h2 className="truncate text-lg font-semibold">
+          <h2 className="truncate text-[17px] font-semibold tracking-tight">
             {roomTitle(room, actor)}
           </h2>
-          <p className="truncate text-sm text-muted-foreground">
+          <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
             {room.kind === 'group' || !room.joined
               ? `${room.members.length} participants`
               : other?.kind === 'agent'
@@ -280,17 +286,19 @@ export function ChatWindow({
       )}
       <div
         ref={scroll}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-6 md:px-8"
+        className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 sm:px-6 md:px-8"
         onScroll={() => {
           if (!active) return
           const el = scroll.current
-          if (el)
+          if (el) {
             sticky.current =
               el.scrollHeight - el.scrollTop - el.clientHeight < 100
+            setAwayFromBottom(!sticky.current)
+          }
           acknowledgeVisible()
         }}
       >
-        <div className="mx-auto flex max-w-3xl flex-col gap-6">
+        <div className="message-timeline mx-auto flex w-full max-w-[960px] flex-col">
           {messages.data?.hasOlder && (
             <Button
               variant="ghost"
@@ -372,154 +380,69 @@ export function ChatWindow({
                         BigInt(message.seq) < BigInt(to),
                     )),
               ) || message.read_by
-            const receiptLabel = readers.length
-              ? `Read by ${readers.map((reader) => reader.name).join(', ')}`
-              : 'Saved on server'
-            const day = new Date(message.created_at).toLocaleDateString(
-              undefined,
-              { month: 'short', day: 'numeric' },
-            )
             const showDay =
               index === 0 ||
               new Date(list[index - 1].created_at).toDateString() !==
                 new Date(message.created_at).toDateString()
+            const previous = list[index - 1]
+            const grouped =
+              !showDay &&
+              previous.sender_id === message.sender_id &&
+              new Date(message.created_at).getTime() -
+                new Date(previous.created_at).getTime() <
+                5 * 60_000
             return (
-              <div key={message.id} id={`message-${message.id}`}>
+              <div
+                key={message.id}
+                id={`message-${message.id}`}
+                className={cn('message-item', !grouped && 'new-sender')}
+              >
                 {showDay && (
-                  <div className="mb-6 text-center">
-                    <span className="rounded-full bg-background/80 px-4 py-1.5 text-sm text-muted-foreground">
-                      {day}
-                    </span>
+                  <div className="message-day">
+                    <span>{dayLabel(message.created_at)}</span>
                   </div>
                 )}
-                <div
-                  data-message-id={message.id}
-                  className={cn(
-                    'flex items-start gap-2',
-                    mine && 'justify-end',
-                  )}
-                >
-                  {!mine && room.kind === 'group' && (
-                    <ChatAvatar
-                      name={message.sender_name}
-                      kind={message.sender_kind}
-                      className="mt-2 hidden size-8 sm:flex"
-                    />
-                  )}
-                  <div
-                    className={cn(
-                      'max-w-[92%] rounded-3xl px-4 py-3 sm:max-w-[85%]',
-                      mine ? 'bg-[var(--chat-outgoing)]' : 'bg-background',
-                    )}
-                  >
-                    {!mine && (
-                      <div className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--chat-name)]">
-                        {message.sender_name}
-                        {message.sender_kind === 'agent' && (
-                          <span className="font-normal text-muted-foreground">
-                            · Agent
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {message.reply_to && (
-                      <button
-                        className="mb-3 block w-full rounded-lg border-l-2 border-primary/40 bg-foreground/5 px-3 py-2 text-left"
-                        onClick={() => {
-                          const target = document.getElementById(
-                            `message-${message.reply_to}`,
-                          )
-                          if (target)
-                            target.scrollIntoView({
-                              behavior: 'smooth',
-                              block: 'center',
-                            })
-                          else
-                            toast('Load earlier messages to view this reply.')
-                        }}
-                      >
-                        <span className="block text-sm font-medium">
-                          {message.reply_name}
-                        </span>
-                        <span className="line-clamp-2 text-sm text-muted-foreground">
-                          {message.reply_preview || 'Attachment'}
-                        </span>
-                      </button>
-                    )}
-                    {message.mentions.length > 0 && (
-                      <p className="mb-2 text-sm font-medium text-[var(--chat-name)]">
-                        {message.mentions
-                          .map(
-                            (id) =>
-                              `@${room.members.find((a) => a.id === id)?.name || 'Former participant'}`,
-                          )
-                          .join(' ')}
-                      </p>
-                    )}
-                    {message.text && (
-                      <p className="whitespace-pre-wrap break-words text-base leading-relaxed [overflow-wrap:anywhere]">
-                        {message.text}
-                      </p>
-                    )}
-                    {message.files.map((file) => (
-                      <a
-                        key={file.id}
-                        href={`/api/v1/files/${file.id}`}
-                        download={file.name}
-                        className="my-2 flex min-w-0 items-center gap-3 rounded-xl border border-foreground/10 bg-background/45 p-3 hover:bg-background/70"
-                      >
-                        <File className="size-6 shrink-0 text-muted-foreground" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-base font-medium">
-                            {file.name}
-                          </span>
-                          <span className="text-sm text-muted-foreground">
-                            {size(file.bytes)}
-                          </span>
-                        </span>
-                        <Download className="size-4 shrink-0" />
-                      </a>
-                    ))}
-                    <div className="mt-1.5 flex items-center justify-end gap-2 text-sm text-muted-foreground">
-                      <time dateTime={message.created_at}>
-                        {new Date(message.created_at).toLocaleTimeString(
-                          undefined,
-                          { hour: '2-digit', minute: '2-digit' },
-                        )}
-                      </time>
-                      {mine && (
-                        <span aria-label={receiptLabel} title={receiptLabel}>
-                          {readers.length ? (
-                            <CheckCheck className="size-3.5" />
-                          ) : (
-                            <Check className="size-3.5" />
-                          )}
-                        </span>
-                      )}
-                      {room.joined && (
-                        <button
-                          className="rounded p-1 hover:bg-foreground/10"
-                          aria-label={`Reply to ${message.sender_name}`}
-                          onClick={() => {
-                            setReply(message)
-                            textarea.current?.focus()
-                          }}
-                        >
-                          <Reply className="size-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <MessageBubble
+                  message={message}
+                  mine={mine}
+                  grouped={grouped}
+                  readers={readers}
+                  room={room}
+                  onReply={(item) => {
+                    setReply(item)
+                    textarea.current?.focus()
+                  }}
+                />
               </div>
             )
           })}
           <div ref={bottom} />
         </div>
       </div>
+      {awayFromBottom && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-28 z-10 flex justify-center">
+          <Button
+            variant="outline"
+            className="pointer-events-auto gap-2 rounded-full bg-background/95 px-4 shadow-lg"
+            onClick={() => {
+              sticky.current = true
+              setAwayFromBottom(false)
+              bottom.current?.scrollIntoView({
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)')
+                  .matches
+                  ? 'instant'
+                  : 'smooth',
+              })
+            }}
+          >
+            <ArrowDown className="size-4" />
+            Latest messages
+          </Button>
+        </div>
+      )}
       {room.joined && (
-        <footer className="shrink-0 bg-background px-3 pb-4 pt-2 md:px-6 md:pb-6">
-          <div className="mx-auto max-w-3xl">
+        <footer className="chat-footer shrink-0 px-3 pt-3 sm:px-6 md:px-8">
+          <div className="mx-auto max-w-[960px]">
             {reply && (
               <div className="mb-3 flex items-center gap-3 rounded-lg bg-muted p-3">
                 <Reply className="size-4 shrink-0" />
@@ -583,7 +506,7 @@ export function ChatWindow({
                 {error}
               </p>
             )}
-            <div className="flex items-end gap-1 rounded-[28px] border border-border/60 bg-muted/60 p-2 shadow-xs">
+            <div className="chat-composer flex items-end gap-1 p-2">
               <input
                 ref={fileInput}
                 type="file"
@@ -611,7 +534,7 @@ export function ChatWindow({
                 ref={textarea}
                 aria-label="Message"
                 placeholder="Write a message…"
-                className="min-h-11 max-h-36 resize-none border-0 bg-transparent py-3 text-base shadow-none focus-visible:ring-0 dark:bg-transparent md:text-base"
+                className="composer-input min-h-10 max-h-40 resize-none border-0 bg-transparent px-2 py-2.5 text-base leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent md:text-base"
                 rows={1}
                 value={draft}
                 disabled={sending}
@@ -620,7 +543,9 @@ export function ChatWindow({
                   if (
                     event.key === 'Enter' &&
                     !event.shiftKey &&
-                    !event.nativeEvent.isComposing
+                    !event.nativeEvent.isComposing &&
+                    event.nativeEvent.keyCode !== 229 &&
+                    window.matchMedia('(pointer: fine)').matches
                   ) {
                     event.preventDefault()
                     void send()
@@ -659,7 +584,7 @@ export function ChatWindow({
               <Button
                 size="icon-lg"
                 aria-label="Send message"
-                className="shrink-0 rounded-full"
+                className="send-button size-11 shrink-0 rounded-full [&_svg]:size-5"
                 disabled={
                   sending || uploading || (!draft.trim() && !files.length)
                 }
@@ -667,9 +592,16 @@ export function ChatWindow({
                   void send()
                 }}
               >
-                {sending ? <Loader2 className="animate-spin" /> : <Send />}
+                {sending ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <ArrowUp strokeWidth={2.5} />
+                )}
               </Button>
             </div>
+            <p className="composer-hint mt-2 text-center text-xs text-muted-foreground/80">
+              Enter to send · Shift + Enter for a new line
+            </p>
           </div>
         </footer>
       )}

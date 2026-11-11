@@ -11,6 +11,7 @@ import {
   MessageCircle,
   Moon,
   Plus,
+  SquarePen,
   PanelLeft,
   Search,
   Settings,
@@ -31,6 +32,7 @@ import { authClient } from '#/lib/auth-client'
 import { cn } from '#/lib/utils'
 import { ChatAvatar } from './avatar'
 import { ChatWindow, roomTitle } from './chat-window'
+import { conversationTime } from './message-bubble'
 import { ManagementPage } from './management'
 import { ConversationDetails, NewConversation } from './conversation-dialogs'
 import type { Actor, Bootstrap, Conversation } from '#/lib/types'
@@ -50,6 +52,7 @@ export function ChatShell({
     void navigate({ search: { view: next } })
   }
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [openedRoom, setOpenedRoom] = useState<Conversation | null>(null)
   const [query, setQuery] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [unread, setUnread] = useState(false)
@@ -81,7 +84,9 @@ export function ChatShell({
       ),
     ).values(),
   ]
-  const selected = conversations.find((c) => c.id === selectedId)
+  const selected =
+    conversations.find((c) => c.id === selectedId) ||
+    (openedRoom?.id === selectedId ? openedRoom : undefined)
   const refresh = useCallback(() => {
     void client.invalidateQueries({ queryKey: ['conversations'] })
     void client.invalidateQueries({ queryKey: ['actors'] })
@@ -92,7 +97,10 @@ export function ChatShell({
       <main className="flex h-dvh w-full overflow-hidden bg-background">
         <nav
           aria-label="Main navigation"
-          className="flex w-14 shrink-0 flex-col items-center gap-2 border-r border-border/50 bg-sidebar py-3 sm:w-16"
+          className={cn(
+            'chat-rail flex w-14 shrink-0 flex-col items-center gap-2 border-r border-border/50 py-4 sm:w-16',
+            view === 'chats' && selectedId && 'hidden md:flex',
+          )}
         >
           <RailButton
             label="Chats"
@@ -160,14 +168,14 @@ export function ChatShell({
         >
           <aside
             className={cn(
-              'flex w-full shrink-0 flex-col border-r border-border/50 bg-sidebar md:w-72 xl:w-80',
+              'conversation-sidebar flex w-full shrink-0 flex-col border-r border-border/60 md:w-72 xl:w-[330px]',
               selectedId && 'hidden md:flex',
               !sidebarOpen && 'md:hidden',
             )}
           >
-            <header className="flex h-16 shrink-0 items-center justify-between gap-2 px-4">
-              <h1 className="truncate text-lg font-semibold tracking-tight">
-                Agent Chat
+            <header className="flex h-[76px] shrink-0 items-center justify-between gap-2 px-5">
+              <h1 className="truncate text-[22px] font-semibold tracking-tight">
+                Chats
               </h1>
               <div className="flex items-center">
                 <Button
@@ -182,20 +190,21 @@ export function ChatShell({
                 <Button
                   variant="ghost"
                   size="icon"
+                  className="rounded-full bg-primary/10 text-primary hover:bg-primary/15"
                   aria-label="New conversation"
                   onClick={() => setDialog('new')}
                 >
-                  <Plus className="size-5" />
+                  <SquarePen className="size-4" />
                 </Button>
               </div>
             </header>
-            <div className="px-4 pb-4">
+            <div className="px-4 pb-3">
               <div className="relative">
                 <Search className="absolute left-3 top-3 size-4 text-muted-foreground" />
                 <Input
                   aria-label="Search conversations"
                   placeholder="Search"
-                  className="h-10 border-0 bg-background pl-10 text-base shadow-none md:text-base"
+                  className="h-10 rounded-xl border border-transparent bg-muted/70 pl-9 text-sm shadow-none transition-colors focus-visible:border-primary/25 focus-visible:bg-background focus-visible:ring-primary/10 md:text-sm"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
@@ -203,21 +212,35 @@ export function ChatShell({
               <div className="mt-3 flex items-center gap-2">
                 <Button
                   size="sm"
-                  variant={!unread ? 'secondary' : 'ghost'}
+                  variant="ghost"
+                  aria-pressed={!unread}
+                  className={cn(
+                    'h-8 rounded-full px-3.5',
+                    !unread
+                      ? 'bg-primary/10 text-primary hover:bg-primary/15'
+                      : 'text-muted-foreground',
+                  )}
                   onClick={() => setUnread(false)}
                 >
                   All
                 </Button>
                 <Button
                   size="sm"
-                  variant={unread ? 'secondary' : 'ghost'}
+                  variant="ghost"
+                  aria-pressed={unread}
+                  className={cn(
+                    'h-8 rounded-full px-3.5',
+                    unread
+                      ? 'bg-primary/10 text-primary hover:bg-primary/15'
+                      : 'text-muted-foreground',
+                  )}
                   onClick={() => setUnread(true)}
                 >
                   Unread
                 </Button>
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto px-2">
+            <div className="chat-scroll min-h-0 flex-1 overflow-y-auto px-2.5 pb-4">
               {rooms.error && (
                 <div className="p-4 text-sm text-destructive" role="alert">
                   {rooms.error.message}
@@ -257,10 +280,14 @@ export function ChatShell({
                 return (
                   <button
                     key={room.id}
-                    onClick={() => setSelectedId(room.id)}
+                    onClick={() => {
+                      setOpenedRoom(room)
+                      setSelectedId(room.id)
+                    }}
+                    aria-current={selectedId === room.id ? 'true' : undefined}
                     className={cn(
-                      'mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-muted/70',
-                      selectedId === room.id && 'bg-muted',
+                      'conversation-row mb-1 flex w-full items-center gap-3 rounded-2xl px-3 py-3.5 text-left',
+                      selectedId === room.id && 'is-selected',
                     )}
                   >
                     <ChatAvatar
@@ -269,25 +296,42 @@ export function ChatShell({
                     />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center justify-between gap-2">
-                        <span className="truncate text-sm font-medium">
+                        <span
+                          className={cn(
+                            'truncate text-[15px] font-medium',
+                            count > 0 && 'font-semibold',
+                          )}
+                        >
                           {roomTitle(room, actor)}
                         </span>
-                        <time className="shrink-0 text-sm text-muted-foreground">
-                          {new Date(room.updated_at).toLocaleTimeString(
-                            undefined,
-                            { hour: '2-digit', minute: '2-digit' },
+                        <time
+                          dateTime={room.updated_at}
+                          title={new Date(room.updated_at).toLocaleString()}
+                          className={cn(
+                            'shrink-0 text-xs tabular-nums text-muted-foreground',
+                            count > 0 && 'font-medium text-primary',
                           )}
+                        >
+                          {conversationTime(room.updated_at)}
                         </time>
                       </span>
                       <span className="mt-1 flex items-center gap-2">
-                        <span className="flex-1 truncate text-sm text-muted-foreground">
+                        <span
+                          className={cn(
+                            'line-clamp-2 min-w-0 flex-1 text-[13px] leading-5 text-muted-foreground',
+                            count > 0 && 'text-foreground/75',
+                          )}
+                        >
                           {room.preview ||
                             (room.last_seq !== '0'
                               ? 'Attachment'
                               : 'No messages yet')}
                         </span>
                         {count > 0 && (
-                          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs text-primary-foreground">
+                          <span
+                            aria-label={`${count} unread messages`}
+                            className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground"
+                          >
                             {count > 99 ? '99+' : String(count)}
                           </span>
                         )}
@@ -440,8 +484,9 @@ function RailButton({
           aria-current={active ? 'page' : undefined}
           onClick={onClick}
           className={cn(
-            'size-10 rounded-xl text-muted-foreground hover:text-foreground [&_svg]:size-5',
-            active && 'bg-accent text-foreground',
+            'size-10 rounded-xl text-muted-foreground transition-colors duration-150 hover:text-foreground [&_svg]:size-5',
+            active &&
+              'bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary',
           )}
         >
           {children}

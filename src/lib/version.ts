@@ -1,3 +1,3 @@
-export const APP_VERSION = '0.2.3'
+export const APP_VERSION = '0.2.4'
 export const API_VERSION = 1
 export const SCHEMA_VERSION = 1

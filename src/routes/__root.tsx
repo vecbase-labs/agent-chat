@@ -3,6 +3,10 @@ import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ThemeProvider } from 'next-themes'
 import { Toaster } from '#/components/ui/sonner'
+import {
+  AppearanceSync,
+  APPEARANCE_INIT_SCRIPT,
+} from '#/components/chat/appearance'
 
 import appCss from '../styles.css?url'
 
@@ -61,14 +65,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: APPEARANCE_INIT_SCRIPT }} />
       </head>
       <body>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="light"
-          enableSystem={false}
-        >
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <QueryClientProvider client={queryClient}>
+            <AppearanceSync />
             {children}
             <Toaster />
           </QueryClientProvider>

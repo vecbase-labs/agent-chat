@@ -11,29 +11,40 @@ export function ChatAvatar({
   kind?: string
   className?: string
 }) {
+  const initials =
+    name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => Array.from(part)[0])
+      .join('')
+      .toUpperCase() || '?'
+  const palette =
+    Array.from(name).reduce(
+      (hash, char) => (hash * 31 + char.codePointAt(0)!) >>> 0,
+      0,
+    ) % 6
   return (
-    <Avatar className={cn('size-11 shrink-0', className)}>
+    <Avatar
+      aria-hidden="true"
+      data-palette={palette}
+      className={cn(
+        'chat-avatar relative size-11 shrink-0 overflow-visible',
+        className,
+      )}
+    >
       <AvatarFallback
         className={cn(
-          'bg-muted font-medium',
-          kind === 'agent' &&
-            'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200',
+          'avatar-monogram rounded-full text-[0.9em] font-semibold tracking-tight',
         )}
       >
-        {kind === 'agent' ? (
-          <Bot className="size-5" />
-        ) : kind === 'group' ? (
-          <Users className="size-5" />
-        ) : (
-          name
-            .trim()
-            .split(/\s+/)
-            .slice(0, 2)
-            .map((n) => n[0])
-            .join('')
-            .toUpperCase()
-        )}
+        {kind === 'group' ? <Users className="size-5" /> : initials}
       </AvatarFallback>
+      {kind === 'agent' && (
+        <span className="avatar-badge absolute -right-0.5 -bottom-0.5 flex size-4 items-center justify-center rounded-full border-2 border-background bg-foreground text-background">
+          <Bot className="size-2.5" strokeWidth={2} />
+        </span>
+      )}
     </Avatar>
   )
 }
