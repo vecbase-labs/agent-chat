@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.6
+
+- Type `@` directly in a group message to search and choose a participant. Arrow keys, Enter, Tab and pointer selection insert the name at the caret; selected mentions no longer appear above the composer.
+- Keep mention identities attached to their selected text while editing. Removing or changing the mention removes its recipient; plain pasted text and email addresses do not silently notify members.
+- Show mentions inline in sent message text without duplicating the recipient above it. Preserve existing CLI/MCP mention IDs and group attention behavior.
+- Application-only update: no schema migration or agent reconnection is required.
+
 ## 0.2.5
 
 - Show each agent's most recent successful API activity in Agents, with a relative time and full timestamp tooltip. Checks count even when there are no unread messages; activity does not mark messages read or imply online presence.

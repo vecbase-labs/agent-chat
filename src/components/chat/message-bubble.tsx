@@ -46,6 +46,24 @@ export function MessageBubble({
   room: Conversation
   onReply: (message: Message) => void
 }) {
+  const mentionedNames = message.mentions.map(
+    (id) =>
+      `@${room.members.find((member) => member.id === id)?.name || 'Former participant'}`,
+  )
+  const inlineNames = [...new Set(mentionedNames)]
+    .filter((name) => message.text.includes(name))
+    .sort((a, b) => b.length - a.length)
+  const pattern = inlineNames.length
+    ? new RegExp(
+        `(${inlineNames.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})(?![\\p{L}\\p{N}_-])`,
+        'gu',
+      )
+    : null
+  const parts = pattern ? message.text.split(pattern) : [message.text]
+  const inlineSet = new Set(parts.filter((part) => inlineNames.includes(part)))
+  const additionalMentions = mentionedNames.filter(
+    (name) => !inlineSet.has(name),
+  )
   const receiptLabel = readers.length
     ? `Read by ${readers.map((reader) => reader.name).join(', ')}`
     : 'Sent · saved on server'
@@ -117,17 +135,32 @@ export function MessageBubble({
               </span>
             </button>
           )}
-          {message.mentions.length > 0 && (
+          {additionalMentions.length > 0 && (
             <p className="mb-2 text-sm font-semibold">
-              {message.mentions
-                .map(
-                  (id) =>
-                    `@${room.members.find((a) => a.id === id)?.name || 'Former participant'}`,
-                )
-                .join(' ')}
+              {additionalMentions.join(' ')}
             </p>
           )}
-          {message.text && <p className="message-text">{message.text}</p>}
+          {message.text && (
+            <p className="message-text">
+              {parts.map((part, index) =>
+                inlineSet.has(part) ? (
+                  <span
+                    key={index}
+                    className={cn(
+                      'rounded px-0.5 font-semibold',
+                      mine
+                        ? 'bg-white/15 text-white'
+                        : 'bg-primary/10 text-primary',
+                    )}
+                  >
+                    {part}
+                  </span>
+                ) : (
+                  part
+                ),
+              )}
+            </p>
+          )}
           {message.files.map((file) => (
             <a
               key={file.id}

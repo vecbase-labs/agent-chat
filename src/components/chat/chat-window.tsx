@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
-  AtSign,
   ArrowDown,
   ArrowUp,
   File,
@@ -14,17 +13,13 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
-import { Textarea } from '#/components/ui/textarea'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '#/components/ui/dropdown-menu'
 import { api, post } from '#/lib/api-client'
 import { cn } from '#/lib/utils'
 import { ChatAvatar } from './avatar'
 import { MessageBubble, dayLabel } from './message-bubble'
+import { MentionInput } from './mention-input'
+import { mentionIds } from '#/lib/mentions'
+import type { MentionDraft } from '#/lib/mentions'
 import type { Actor, Attachment, Conversation, Message } from '#/lib/types'
 
 type Page = {
@@ -71,8 +66,7 @@ export function ChatWindow({
   const firstScroll = useRef(true)
   const [awayFromBottom, setAwayFromBottom] = useState(false)
   const receivedIds = useRef(new Set<string>())
-  const [draft, setDraft] = useState('')
-  const [mentions, setMentions] = useState<string[]>([])
+  const [draft, setDraft] = useState<MentionDraft>({ text: '', mentions: [] })
   const [reply, setReply] = useState<Message | null>(null)
   const [files, setFiles] = useState<Attachment[]>([])
   const [uploading, setUploading] = useState(false)
@@ -167,10 +161,11 @@ export function ChatWindow({
       document.removeEventListener('visibilitychange', acknowledgeVisible)
   }, [acknowledgeVisible])
   async function send() {
-    if (sending || uploading || (!draft.trim() && files.length === 0)) return
+    if (sending || uploading || (!draft.text.trim() && files.length === 0))
+      return
     const data = {
-      text: draft,
-      mentions,
+      text: draft.text,
+      mentions: mentionIds(draft),
       replyTo: reply?.id || null,
       fileIds: files.map((f) => f.id),
     }
@@ -185,8 +180,7 @@ export function ChatWindow({
         idempotencyKey: pendingSend.current.key,
       })
       pendingSend.current = null
-      setDraft('')
-      setMentions([])
+      setDraft({ text: '', mentions: [] })
       setReply(null)
       setFiles([])
       sticky.current = true
@@ -464,22 +458,6 @@ export function ChatWindow({
                 </Button>
               </div>
             )}
-            {mentions.length > 0 && (
-              <div className="mb-2 flex flex-wrap gap-2">
-                {mentions.map((id) => (
-                  <button
-                    className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm"
-                    key={id}
-                    onClick={() =>
-                      setMentions(mentions.filter((m) => m !== id))
-                    }
-                  >
-                    @{room.members.find((a) => a.id === id)?.name}
-                    <X className="size-3" />
-                  </button>
-                ))}
-              </div>
-            )}
             {files.length > 0 && (
               <div className="mb-3 flex flex-wrap gap-2">
                 {files.map((file) => (
@@ -530,63 +508,29 @@ export function ChatWindow({
                   <Paperclip />
                 )}
               </Button>
-              <Textarea
-                ref={textarea}
-                aria-label="Message"
-                placeholder="Write a message…"
-                className="composer-input min-h-10 max-h-40 resize-none border-0 bg-transparent px-2 py-2.5 text-base leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent md:text-base"
-                rows={1}
+              <MentionInput
+                inputRef={textarea}
                 value={draft}
+                onChange={setDraft}
+                members={
+                  room.kind === 'group'
+                    ? room.members.filter(
+                        (member) =>
+                          member.id !== actor.id && !member.disabled_at,
+                      )
+                    : []
+                }
                 disabled={sending}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (
-                    event.key === 'Enter' &&
-                    !event.shiftKey &&
-                    !event.nativeEvent.isComposing &&
-                    event.nativeEvent.keyCode !== 229 &&
-                    window.matchMedia('(pointer: fine)').matches
-                  ) {
-                    event.preventDefault()
-                    void send()
-                  }
+                onSend={() => {
+                  void send()
                 }}
               />
-              {room.kind === 'group' && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon-lg"
-                      aria-label="Mention a participant"
-                    >
-                      <AtSign />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {room.members
-                      .filter((m) => m.id !== actor.id && !m.disabled_at)
-                      .map((m) => (
-                        <DropdownMenuItem
-                          key={m.id}
-                          onSelect={() => {
-                            if (!mentions.includes(m.id))
-                              setMentions([...mentions, m.id])
-                            textarea.current?.focus()
-                          }}
-                        >
-                          {m.name}
-                        </DropdownMenuItem>
-                      ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
               <Button
                 size="icon-lg"
                 aria-label="Send message"
                 className="send-button size-11 shrink-0 rounded-full [&_svg]:size-5"
                 disabled={
-                  sending || uploading || (!draft.trim() && !files.length)
+                  sending || uploading || (!draft.text.trim() && !files.length)
                 }
                 onClick={() => {
                   void send()
