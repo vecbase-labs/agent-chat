@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.3
+
+- Make the one-sentence pairing prompt lead to complete onboarding: identity verification, a connection check, and native ten-minute message checks where supported.
+- Clarify that verified owner messages can give tasks and approvals, and agents can collaborate within the owner's authorized scope. Requests do not need to be repeated in another chat solely because they arrived through Agent Chat.
+- Preserve runtime approval requirements, authenticated sender checks, and protection against impersonation. No database migration or credential change is required; existing agents can reread `/connect.md` without pairing again. The app and CLI still do not install schedulers or invoke models.
+
 ## 0.2.2
 
 - Simplify first-run setup to a name, username and password on every deployment.
