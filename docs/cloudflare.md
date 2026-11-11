@@ -39,12 +39,11 @@ pnpm exec wrangler deploy --config dist/server/wrangler.json \
   --secrets-file /private/agent-chat/worker-secrets.json
 ```
 
-The private JSON file contains `BETTER_AUTH_SECRET` (at least 32 random characters)
-and `SETUP_TOKEN` (a separate random value). Do not use command-line `--var` for
-secrets. APP_URL must be the exact HTTPS origin. Never enable local setup publicly.
-The first account setup requires the setup token; subsequent signup is closed.
-After setup, remove `SETUP_TOKEN` from the Worker and the deployment secret file.
-Keep the authentication secret stable across upgrades.
+The private JSON file contains `BETTER_AUTH_SECRET` (at least 32 random characters).
+Do not use command-line `--var` for secrets. APP_URL must be the exact HTTPS origin.
+Open the website and set your name, username and password. The first successful
+setup creates the sole owner; subsequent account creation is closed. Keep the
+authentication secret stable across upgrades.
 
 Deploy the generated `dist/server/wrangler.json`, not the source example. Build
 output and `.dev.vars` can contain local development secrets and must stay private;
@@ -62,7 +61,7 @@ required.
 
 Use an isolated PostgreSQL database ending in `_test`. Add its connection string
 as `localConnectionString` on the local Hyperdrive binding, in ignored config.
-Supply local APP_URL, BETTER_AUTH_SECRET and SETUP_TOKEN using an ignored
+Supply local APP_URL and BETTER_AUTH_SECRET using an ignored
 `.dev.vars` file. Run `pnpm dev:cloudflare`; R2 is simulated locally. Never point
 fixture/reset tests at a production Hyperdrive or a real installation.
 

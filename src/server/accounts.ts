@@ -7,7 +7,7 @@ import {
   MAX_PASSWORD_LENGTH,
 } from '../lib/password-policy'
 import { transaction } from './db'
-import { actorColumns, hash, sameSecret } from './security'
+import { actorColumns, hash } from './security'
 import { getEnv } from './env'
 import { fail } from './errors'
 import type { PoolClient } from 'pg'
@@ -21,7 +21,6 @@ export const accountInput = z.object({
     .toLowerCase()
     .regex(/^[a-z0-9_]{3,40}$/),
   password: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
-  token: z.string().max(200).optional(),
 })
 type AccountInput = z.infer<typeof accountInput>
 async function createHuman(
@@ -61,12 +60,6 @@ async function createHuman(
   return actorId
 }
 export async function setup(data: AccountInput) {
-  const env = getEnv()
-  if (
-    !env.localSetup &&
-    (!env.setupToken || !sameSecret(data.token || '', env.setupToken))
-  )
-    fail(403, 'SETUP_TOKEN_REQUIRED', 'Enter the installation setup token.')
   const passwordHash = await hashPassword(data.password)
   return transaction(async (client) => {
     await client.query('SELECT pg_advisory_xact_lock(81724002)')

@@ -32,7 +32,6 @@ export function AccountScreen({
           username,
           password,
           name: form.get('name'),
-          token: form.get('token') || undefined,
         })
       const result = await authClient.signIn.username({ username, password })
       if (result.error)
@@ -91,14 +90,6 @@ export function AccountScreen({
               Use at least {MIN_PASSWORD_LENGTH} characters. Keep it in your
               password manager.
             </p>
-          )}
-          {setup && bootstrap.setupTokenRequired && (
-            <Field
-              label="Installation token"
-              name="token"
-              type="password"
-              autoComplete="off"
-            />
           )}
           {error && (
             <p

@@ -133,3 +133,7 @@ It does not create additional account owners or reset any conversation data.
 ## Cloudflare installations
 
 Use the [Workers upgrade procedure](cloudflare.md#upgrades-and-backups). Local disk backup commands do not back up R2. Worker requests also verify the bundled migration manifest against the database ledger.
+
+## Upgrading to 0.2.2
+
+No schema migration is needed. First-run setup now uses only a name, username and password. Existing installations keep their owner and credentials; setup stays closed. Remove the obsolete `SETUP_TOKEN` and `ALLOW_LOCAL_SETUP` deployment variables. `BETTER_AUTH_SECRET` is still required and must remain unchanged.

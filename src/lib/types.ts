@@ -48,7 +48,6 @@ export type Message = {
 }
 export type Bootstrap = {
   initialized: boolean
-  setupTokenRequired: boolean
   actor: Actor | null
   name: string
   version: string

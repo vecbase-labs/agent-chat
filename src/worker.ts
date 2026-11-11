@@ -10,7 +10,6 @@ import type { RequestRuntime } from './server/runtime'
 interface WorkerEnv {
   APP_URL: string
   BETTER_AUTH_SECRET: string
-  SETUP_TOKEN?: string
   MAX_FILE_BYTES?: string
   MAINTENANCE?: string
   DATABASE: Hyperdrive
@@ -31,7 +30,6 @@ export default {
       variables: {
         APP_URL: env.APP_URL,
         BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
-        SETUP_TOKEN: env.SETUP_TOKEN,
         MAX_FILE_BYTES: env.MAX_FILE_BYTES,
       },
       databaseUrl: env.DATABASE.connectionString,

@@ -32,9 +32,6 @@ export function getEnv() {
   const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(appUrl.hostname)
   if (!loopback && appUrl.protocol !== 'https:')
     throw new Error('Public installations require HTTPS.')
-  const localSetup = vars.ALLOW_LOCAL_SETUP === 'true'
-  if (localSetup && !loopback)
-    throw new Error('Local setup is only allowed with a loopback APP_URL.')
   const maxFileBytes = Number(vars.MAX_FILE_BYTES || 10485760)
   if (
     !Number.isSafeInteger(maxFileBytes) ||
@@ -47,8 +44,6 @@ export function getEnv() {
     databaseUrl:
       requestRuntime.getStore()?.databaseUrl ?? required('DATABASE_URL'),
     secret,
-    localSetup,
-    setupToken: vars.SETUP_TOKEN || '',
     filesDir: resolve(vars.FILES_DIR || './data/files'),
     maxFileBytes,
   }

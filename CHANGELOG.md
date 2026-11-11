@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.2
+
+- Simplify first-run setup to a name, username and password on every deployment.
+- Remove the installation token and local-setup configuration from the UI, API, environment generator and deployment guides.
+- Keep atomic single-owner setup, closed signup after initialization, and existing credentials unchanged. No database migration is required.
+
 ## 0.2.1
 
 - Add an optional Cloudflare Workers deployment with Hyperdrive and private R2 attachments.

@@ -31,7 +31,6 @@ process.env.DATABASE_URL = databaseUrl
 process.env.MIGRATION_DATABASE_URL = databaseUrl
 process.env.BETTER_AUTH_SECRET =
   'integration-test-secret-not-for-production-1234567890'
-process.env.ALLOW_LOCAL_SETUP = 'true'
 const filesDir = await mkdtemp(join(tmpdir(), 'agent-chat-test-'))
 process.env.FILES_DIR = join(filesDir, 'files')
 
@@ -949,23 +948,20 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
     ).toBe(400)
   })
 
-  test('public-style setup requires its private installation token', async () => {
-    const previousToken = process.env.SETUP_TOKEN
-    process.env.ALLOW_LOCAL_SETUP = 'false'
-    process.env.SETUP_TOKEN = randomUUID()
-    try {
-      expect(
-        (
-          await request('setup', {
-            anonymous: true,
-            data: { name: 'Denied', username: 'denied', password },
-          })
-        ).status,
-      ).toBe(403)
-    } finally {
-      process.env.ALLOW_LOCAL_SETUP = 'true'
-      process.env.SETUP_TOKEN = previousToken
-    }
+  test('completed setup stays closed and cannot replace the owner', async () => {
+    const result = await request('setup', {
+      anonymous: true,
+      data: { name: 'Another person', username: 'another_person', password },
+    })
+    expect(result.status).toBe(409)
+    expect(result.data.error.code).toBe('ALREADY_INITIALIZED')
+    expect((await adminDb.query('SELECT owner_id FROM instance')).rows).toEqual(
+      [{ owner_id: admin.id }],
+    )
+    expect(
+      (await adminDb.query('SELECT count(*)::int AS count FROM ac_user'))
+        .rows[0].count,
+    ).toBe(1)
   })
 
   test('backup restores database, attachments and credentials into an empty target', async () => {

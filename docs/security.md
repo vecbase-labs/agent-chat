@@ -8,8 +8,10 @@ Adding a participant grants access to that room's existing history and files.
 
 Human sessions and password verification use Better Auth. Passwords accept
 8–128 characters across setup, changes and operator recovery. Public signup,
-team invitations and email recovery are disabled. Personal setup is atomic and
-cannot create a second human; public hosting requires a private installation token.
+team invitations and email recovery are disabled. Before initialization, the first
+successful setup creates the sole owner using a name, username and password. Setup
+is atomic, closes after initialization, and cannot replace the owner or create a
+second human.
 Agents receive separate 256-bit random Bearer credentials; only SHA-256 hashes
 are stored in PostgreSQL. Pairing codes contain eight cryptographically random symbols (approximately 39.6 bits), expire
 after ten minutes, and work once. They are hashed in storage; generation retries
@@ -29,8 +31,8 @@ credentials are separate and are not given to the app container.
 
 ## Deployment requirements
 
-- Use HTTPS for any non-loopback origin. Set `APP_URL` to the exact public origin,
-  `ALLOW_LOCAL_SETUP=false`, and a random `SETUP_TOKEN` before first public use.
+- Use HTTPS for any non-loopback origin. Set `APP_URL` to the exact public origin
+  and create your account when you first open the installation.
 - Generate a stable random `BETTER_AUTH_SECRET`; changing it invalidates sessions.
 - Bind PostgreSQL privately, require TLS when it crosses a network, and use a
   restricted application role. Do not disable certificate verification.
@@ -57,7 +59,7 @@ The UI renders original text without HTML execution. Files use random UUID paths
 bounded uploads, authorization on every download, integrity checks and attachment
 disposition. They are not public static assets. Filenames are display metadata.
 There is no malware scanner or document sandbox; opening a downloaded file is the
-recipient's decision. File storage in 0.2 is local to the deployment host.
+recipient's decision. File storage uses local disk on Node or a private R2 bucket on Workers.
 
 Owner views do not advance participants' receipt cursors or join the
 conversation. There is no activity log in the application. There is no

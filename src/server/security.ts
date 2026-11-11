@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { getAuth } from './auth'
 import { query } from './db'
@@ -9,9 +9,6 @@ import type { Actor } from '../lib/types'
 export const uuid = z.string().uuid()
 export const hash = (value: string | Uint8Array) =>
   createHash('sha256').update(value).digest('hex')
-export function sameSecret(a: string, b: string) {
-  return timingSafeEqual(Buffer.from(hash(a)), Buffer.from(hash(b)))
-}
 export const actorColumns = 'id,name,kind,owner_id,description,disabled_at'
 export async function authenticate(
   request: Request,

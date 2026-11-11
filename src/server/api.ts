@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { newId } from '../lib/id'
 import { APP_VERSION, API_VERSION } from '../lib/version'
-import { getEnv } from './env'
 import { query, ensureSchema, transaction } from './db'
 import { HttpError, fail } from './errors'
 import {
@@ -61,7 +60,6 @@ async function route(request: Request) {
       initialized: !!instance,
       name: instance?.name || 'Agent Chat',
       actor,
-      setupTokenRequired: !getEnv().localSetup,
       version: APP_VERSION,
       apiVersion: API_VERSION,
     })
