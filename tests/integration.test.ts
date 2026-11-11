@@ -6,6 +6,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:http'
+import { SCHEMA_VERSION } from '../src/lib/version'
 import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import type { Actor } from '../src/lib/types'
@@ -275,6 +276,119 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
         .status,
     ).toBe(429)
     await adminDb.query("DELETE FROM request_limits WHERE key='anonymous:pair'")
+  })
+
+  test('agent activity records successful requests, coalesces writes and never implies read', async () => {
+    const a = await createAgent('Activity fixture')
+    const activity = async () =>
+      (
+        await adminDb.query('SELECT last_active_at FROM actors WHERE id=$1', [
+          a.actor.id,
+        ])
+      ).rows[0].last_active_at
+    expect(await activity()).toBeNull()
+    await request('actors')
+    await request(`agents/${a.actor.id}`, {
+      method: 'PATCH',
+      data: { description: 'Owner edit' },
+    })
+    await request('health', { bearer: a.token })
+    expect(
+      (
+        await request('agents', {
+          bearer: a.token,
+          data: { name: 'Forbidden' },
+        })
+      ).status,
+    ).toBe(403)
+    expect(
+      (await request('unknown-endpoint', { bearer: a.token })).status,
+    ).toBe(404)
+    expect(
+      (await request('me', { bearer: 'ac_' + 'x'.repeat(48) })).status,
+    ).toBe(401)
+    expect(await activity()).toBeNull()
+    const checked = await request('check', { bearer: a.token })
+    expect(checked.status).toBe(200)
+    expect(checked.data.needsAttention).toBe(false)
+    const first = await activity()
+    expect(first).toBeInstanceOf(Date)
+    await Promise.all(
+      Array.from({ length: 5 }, () => request('me', { bearer: a.token })),
+    )
+    expect(await activity()).toEqual(first)
+    const chat = (
+      await request('conversations', {
+        data: { kind: 'direct', members: [a.actor.id] },
+      })
+    ).data.id
+    await request(`conversations/${chat}/messages`, {
+      data: { text: 'Unread activity fixture', idempotencyKey: randomUUID() },
+    })
+    await adminDb.query(
+      "UPDATE actors SET last_active_at=now()-interval '2 minutes' WHERE id=$1",
+      [a.actor.id],
+    )
+    expect((await request('check', { bearer: a.token })).data.unread).toBe(1)
+    expect((await activity()).getTime()).toBeGreaterThan(first.getTime())
+    expect(
+      (
+        await adminDb.query(
+          'SELECT last_read_seq FROM conversation_members WHERE conversation_id=$1 AND actor_id=$2',
+          [chat, a.actor.id],
+        )
+      ).rows[0].last_read_seq,
+    ).toBe('0')
+    expect(
+      (await request('actors')).data.actors.find(
+        (actor: Actor) => actor.id === a.actor.id,
+      ).last_active_at,
+    ).toBeTruthy()
+    expect(
+      (
+        await adminDb.query('SELECT last_active_at FROM actors WHERE id=$1', [
+          admin.id,
+        ])
+      ).rows[0].last_active_at,
+    ).toBeNull()
+  })
+
+  test('MCP tool success records activity but tool errors do not', async () => {
+    const a = await createAgent('MCP activity fixture')
+    async function call(name: string, args: Record<string, unknown> = {}) {
+      const response = await fetch(origin + '/mcp', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${a.token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name, arguments: args },
+        }),
+      })
+      return response.json()
+    }
+    const rejected = await call('unknown-tool')
+    expect(rejected.error || rejected.result?.isError).toBeTruthy()
+    expect(
+      (
+        await adminDb.query('SELECT last_active_at FROM actors WHERE id=$1', [
+          a.actor.id,
+        ])
+      ).rows[0].last_active_at,
+    ).toBeNull()
+    expect((await call('check')).result.isError).not.toBe(true)
+    expect(
+      (
+        await adminDb.query('SELECT last_active_at FROM actors WHERE id=$1', [
+          a.actor.id,
+        ])
+      ).rows[0].last_active_at,
+    ).toBeInstanceOf(Date)
   })
 
   test('groups, direct conversations and explicit membership permissions', async () => {
@@ -778,7 +892,7 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
     expect(
       (await adminDb.query('SELECT max(version) FROM schema_migrations'))
         .rows[0].max,
-    ).toBe(1)
+    ).toBe(SCHEMA_VERSION)
     expect(
       (
         await adminDb.query(

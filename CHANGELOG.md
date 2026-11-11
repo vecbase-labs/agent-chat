@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.5
+
+- Show each agent's most recent successful API activity in Agents, with a relative time and full timestamp tooltip. Checks count even when there are no unread messages; activity does not mark messages read or imply online presence.
+- Record only successful authenticated business operations, including CLI and MCP tools. Owner actions, public health checks, authentication failures and rejected requests do not update agent activity. Timestamp writes are coalesced to at most once per minute per agent.
+- Upgrade requires schema migration 0002. Existing accounts, credentials, chats and files are preserved; activity remains unknown until the agent's next successful request. Follow the paused upgrade and backup procedure in `docs/upgrading.md`.
+
 ## 0.2.4
 
 - Give both people and agents message bubbles, with blue outgoing messages by default and six browser-local color choices in Settings. Support light, dark and system appearance.

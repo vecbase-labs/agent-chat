@@ -7,6 +7,7 @@ import { HttpError, fail } from './errors'
 import {
   authenticate,
   actorColumns,
+  recordAgentActivity,
   body,
   checkOrigin,
   limit,
@@ -38,7 +39,7 @@ const agentInput = z.strictObject({
 })
 const json = (data: unknown, status = 200) => Response.json(data, { status })
 
-async function route(request: Request) {
+async function route(request: Request, activity: { actor?: Actor }) {
   await ensureSchema()
   checkOrigin(request)
   const url = new URL(request.url)
@@ -78,6 +79,7 @@ async function route(request: Request) {
     )
   }
   const actor = (await authenticate(request))!
+  activity.actor = actor
   await limit(
     actor.id + (method === 'GET' ? ':read' : ':write'),
     method === 'GET' ? 600 : 120,
@@ -296,8 +298,18 @@ async function route(request: Request) {
 
 export async function handleApi(request: Request) {
   let response: Response
+  const activity: { actor?: Actor } = {}
   try {
-    response = await route(request)
+    response = await route(request, activity)
+    if (response.ok && activity.actor) {
+      // Activity is informational: a failed timestamp write must not turn an
+      // already committed message into a reported send failure.
+      try {
+        await recordAgentActivity(activity.actor)
+      } catch {
+        console.error('Agent activity timestamp could not be recorded')
+      }
+    }
   } catch (error) {
     if (error instanceof HttpError)
       response = json(

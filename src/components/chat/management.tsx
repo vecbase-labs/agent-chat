@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import {
   Copy,
@@ -31,6 +31,7 @@ import { APP_VERSION } from '#/lib/version'
 import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH } from '#/lib/password-policy'
 import { ChatAvatar } from './avatar'
 import { AppearanceSettings } from './appearance'
+import { AgentActivity } from './agent-activity'
 import type { Actor, Conversation } from '#/lib/types'
 
 type Enrollment = {
@@ -53,6 +54,12 @@ export function ManagementPage({
   onRefresh,
   onOpenChat,
 }: Props) {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    if (mode !== 'agents') return
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(timer)
+  }, [mode])
   const [creating, setCreating] = useState(false)
   const [selected, setSelected] = useState<Actor | null>(null)
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
@@ -328,6 +335,12 @@ export function ManagementPage({
                         : !a.paired
                           ? 'Awaiting connection'
                           : 'Paired'}
+                      {(a.paired || a.last_active_at) && (
+                        <>
+                          <span aria-hidden="true"> · </span>
+                          <AgentActivity value={a.last_active_at} now={now} />
+                        </>
+                      )}
                     </p>
                     {a.description && (
                       <p className="mt-2 text-sm">{a.description}</p>

@@ -9,7 +9,24 @@ import type { Actor } from '../lib/types'
 export const uuid = z.string().uuid()
 export const hash = (value: string | Uint8Array) =>
   createHash('sha256').update(value).digest('hex')
-export const actorColumns = 'id,name,kind,owner_id,description,disabled_at'
+export const actorColumns =
+  'id,name,kind,owner_id,description,disabled_at,last_active_at'
+
+export async function recordAgentActivity(actor: Actor) {
+  if (
+    actor.kind !== 'agent' ||
+    (actor.last_active_at &&
+      Date.now() - new Date(actor.last_active_at).getTime() < 60_000)
+  )
+    return
+  // The database condition also coalesces concurrent requests across instances.
+  await query(
+    `UPDATE actors SET last_active_at=now() WHERE id=$1 AND kind='agent'
+      AND disabled_at IS NULL
+      AND (last_active_at IS NULL OR last_active_at < now()-interval '1 minute')`,
+    [actor.id],
+  )
+}
 export async function authenticate(
   request: Request,
   optional = false,

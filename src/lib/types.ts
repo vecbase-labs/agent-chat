@@ -5,6 +5,7 @@ export type Actor = {
   owner_id: string | null
   description: string
   disabled_at: string | null
+  last_active_at: string | null
   paired?: boolean
 }
 export type Conversation = {

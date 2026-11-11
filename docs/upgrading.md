@@ -16,6 +16,23 @@ downgrade refusal, and a real database/file backup and restore.
 
 ## Upgrade contract
 
+### Upgrading to 0.2.5
+
+Schema 2 adds the nullable `actors.last_active_at` timestamp. Stop application
+instances (or put the Worker in maintenance), back up the database and preserve
+attachments, then apply migration 0002 before starting 0.2.5. No backfill or
+credential changes are required. Existing agents show no activity until their
+next successful authenticated business request. Requests within one minute share
+an activity timestamp; this is an approximate connection indicator, not an online,
+message-read or task-completion status. MCP business tools count through the same
+API; transport handshakes and tool discovery do not. No scheduler is added.
+
+The 0.2.4 application refuses schema 2. Rollback follows the restore procedure
+below using the pre-upgrade backup and matching application; do not delete the
+migration record or apply an automatic down migration.
+
+### General rules
+
 1. SQL migrations are numbered, append-only, and SHA-256 checked. Never edit an
    applied migration. Add a new file and increment `SCHEMA_VERSION` instead.
 2. The migration runner holds a PostgreSQL advisory lock. Each migration and its

@@ -3,5 +3,10 @@
     "version": 1,
     "name": "0001_initial.sql",
     "checksum": "f89d1ef383291a819882cc5529a39630396b7734f71f7d295fd456c035e8a870"
+  },
+  {
+    "version": 2,
+    "name": "0002_agent_activity.sql",
+    "checksum": "8513f00f766f3caf795cecf3d1776f3f909dd8eb5f715d12261206749acb7830"
   }
 ]
