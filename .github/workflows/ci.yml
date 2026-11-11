@@ -1,0 +1,75 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: test_owner
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: agent_chat_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U test_owner -d agent_chat_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql://test_owner:ci-only-password@127.0.0.1:5432/agent_chat_test
+      PG_BIN_DIR: /usr/lib/postgresql/18/bin
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.23.1
+      - run: corepack enable && corepack prepare pnpm@10.33.0 --activate
+      - name: Install PostgreSQL client 18
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm check
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm build:cloudflare
+      - run: pnpm release:check
+      - name: Scan Git history for secrets
+        run: |
+          curl -fsSL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o "$RUNNER_TEMP/gitleaks.tar.gz"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" git --redact --no-banner --log-opts="--all" .
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22.23.1
+      - run: node scripts/setup-env.mjs
+      - run: docker compose up -d postgres
+      - run: docker compose build app
+      - run: docker compose run --rm migrate
+      - run: docker compose up -d app
+      - name: Verify fresh installation
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:3100/api/v1/health > /dev/null; then break; fi
+            sleep 2
+          done
+          node --input-type=module -e "const r=await fetch('http://localhost:3100/api/v1/bootstrap');const b=await r.json();if(!r.ok||b.initialized!==false)process.exit(1)"
+      - run: docker compose down -v
+        if: always()

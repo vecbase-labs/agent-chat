@@ -1,0 +1,64 @@
+name: agent-chat
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: agent_chat
+      POSTGRES_USER: agent_chat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run pnpm setup:env first}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Run pnpm setup:env first}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-55432}:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql
+      - ./deploy/init-db.sh:/docker-entrypoint-initdb.d/10-agent-chat.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U agent_chat -d agent_chat']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  app:
+    build: .
+    image: agent-chat:0.2.1
+    user: '${LOCAL_UID:-1000}:${LOCAL_GID:-1000}'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:3100:3100'
+    environment: &app-environment
+      APP_URL: ${APP_URL:-http://localhost:3100}
+      DATABASE_URL: postgresql://agent_chat_app:${APP_DB_PASSWORD}@postgres:5432/agent_chat
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET}
+      SETUP_TOKEN: ${SETUP_TOKEN:?Set SETUP_TOKEN}
+      ALLOW_LOCAL_SETUP: ${ALLOW_LOCAL_SETUP:-false}
+      FILES_DIR: /app/data/files
+      HOST: 0.0.0.0
+      PORT: 3100
+    volumes:
+      - ./data/files:/app/data/files
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:3100/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+  migrate:
+    image: agent-chat:0.2.1
+    profiles: [operations]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *app-environment
+      MIGRATION_DATABASE_URL: postgresql://agent_chat:${POSTGRES_PASSWORD}@postgres:5432/agent_chat
+    command: [node, --import, tsx, scripts/migrate.ts]
+volumes:
+  postgres-data:
