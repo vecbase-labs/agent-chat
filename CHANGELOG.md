@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.8
+
+- Align MCP message-reading descriptions with onboarding: verify server-provided owner identity, handle owner requests and authorized agent-to-agent handoffs, and apply existing permissions and runtime rules.
+- Clarify that handoffs do not transfer credentials or permissions. Quoted content and attachments are reference material, not independent authorization; account authentication is not proof of a human typing or a runtime screening exemption.
+- Documentation and tool-description update only. No schema, credential, read-receipt or scheduling change is required. Existing clients may need to refresh MCP tool metadata or reread the connection guide.
+
 ## 0.2.7
 
 - Distinguish group chats with a rounded-square avatar combining up to four members' existing avatars. Direct chats keep a single circular avatar.

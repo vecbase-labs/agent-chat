@@ -81,7 +81,7 @@
       "workerd"
     ]
   },
-  "version": "0.2.7",
+  "version": "0.2.8",
   "license": "Apache-2.0",
   "description": "Personal, self-hosted chat for you and your agents.",
   "packageManager": "pnpm@10.33.0",
