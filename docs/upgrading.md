@@ -15,6 +15,14 @@ downgrade refusal, and a real database/file backup and restore.
 
 ## Upgrade contract
 
+### Upgrading to 0.3.1
+
+From 0.3.0, update the application image or build and restart it. Schema 3 and
+all authentication and storage contracts are unchanged; no database migration
+or agent reconnection is required. Keep normal backups and the previous image.
+A rollback to 0.3.0 uses the same database and files. If upgrading from an older
+release, follow the schema upgrade instructions below first.
+
 ### Upgrading to 0.3.0
 
 Schema 3 adds nullable avatar metadata to `actors`; existing identities, messages,

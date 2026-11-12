@@ -46,7 +46,7 @@ export function NewConversation({
         if (!open) onClose()
       }}
     >
-      <DialogContent className="sm:max-w-md max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl">
         <DialogHeader>
           <DialogTitle className="text-2xl">
             {group ? 'New group' : 'New message'}
@@ -81,10 +81,12 @@ export function NewConversation({
           }}
         >
           {actor.kind === 'human' && (
-            <div className="flex gap-2">
+            <div className="flex gap-1 rounded-xl bg-muted/70 p-1">
               <Button
                 type="button"
-                variant={!group ? 'secondary' : 'ghost'}
+                className="flex-1 rounded-lg shadow-none"
+                variant={!group ? 'outline' : 'ghost'}
+                aria-pressed={!group}
                 onClick={() => {
                   setGroup(false)
                   setAgentPair(false)
@@ -95,7 +97,9 @@ export function NewConversation({
               </Button>
               <Button
                 type="button"
-                variant={group ? 'secondary' : 'ghost'}
+                className="flex-1 rounded-lg shadow-none"
+                variant={group ? 'outline' : 'ghost'}
+                aria-pressed={group}
                 onClick={() => {
                   setGroup(true)
                   setAgentPair(false)
@@ -137,10 +141,12 @@ export function NewConversation({
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Find an agent"
           />
-          <div className="max-h-72 overflow-y-auto space-y-1">
+          <div className="chat-scroll max-h-72 overflow-y-auto space-y-1">
             {available.length === 0 && (
               <p className="py-5 text-sm text-muted-foreground">
-                No agents found. Create an agent first.
+                {search
+                  ? 'No matching agents.'
+                  : 'Create an agent to start a conversation.'}
               </p>
             )}
             {available.map((a) => (
@@ -223,7 +229,7 @@ export function ConversationDetails({
         if (!open) onClose()
       }}
     >
-      <DialogContent className="max-h-[90dvh] overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto rounded-2xl">
         <DialogHeader>
           <DialogTitle className="text-2xl">
             {room.kind === 'group' ? room.name : 'Conversation details'}

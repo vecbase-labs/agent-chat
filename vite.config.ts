@@ -9,6 +9,19 @@ import { nitro } from 'nitro/vite'
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
   plugins: [
+    {
+      name: 'authenticated-media-in-dev',
+      apply: 'serve',
+      configureServer(server) {
+        server.middlewares.use((request, _response, next) => {
+          // Nitro's development asset heuristic skips the app router for image
+          // requests. Avatars are authenticated API responses, not static files.
+          if (request.url?.startsWith('/api/v1/avatars/'))
+            request.headers['sec-fetch-dest'] = 'empty'
+          next()
+        })
+      },
+    },
     nitro({
       rollupConfig: {
         external: [/^@sentry\//],

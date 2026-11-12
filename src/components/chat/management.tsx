@@ -8,10 +8,21 @@ import {
   Check,
   KeyRound,
   ArrowLeft,
+  MoreHorizontal,
+  Settings2,
+  MessageCircle,
+  Bot,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '#/components/ui/dropdown-menu'
 import { Label } from '#/components/ui/label'
 import { Textarea } from '#/components/ui/textarea'
 import { Checkbox } from '#/components/ui/checkbox'
@@ -185,22 +196,38 @@ export function ManagementPage({
         className="min-w-0 flex-1 overflow-y-auto overscroll-contain"
       >
         <div className="mx-auto w-full max-w-4xl space-y-8 px-5 py-8 md:px-10 md:py-12">
-          <header className="space-y-2">
-            <h1
-              id="management-title"
-              className="text-3xl font-semibold tracking-tight"
-            >
-              {title}
-            </h1>
-            <p className="text-base text-muted-foreground">
-              {enrollment
-                ? 'Copy this message into your agent’s current chat.'
-                : creating
-                  ? 'Give your agent a name and choose its groups.'
-                  : mode === 'agents'
-                    ? 'Connect the agents you already use.'
-                    : 'Make yourself at home.'}
-            </p>
+          <header className="flex items-start justify-between gap-4">
+            <div className="space-y-2">
+              <h1
+                id="management-title"
+                className="text-3xl font-semibold tracking-tight"
+              >
+                {title}
+              </h1>
+              <p className="text-base text-muted-foreground">
+                {enrollment
+                  ? 'Copy this message into your agent’s current chat.'
+                  : creating
+                    ? 'Give your agent a name and choose its groups.'
+                    : mode === 'agents'
+                      ? 'Connect the agents you already use.'
+                      : 'Make yourself at home.'}
+              </p>
+            </div>
+            {isOwner && mode === 'agents' && !creating && !enrollment && (
+              <Button
+                onClick={() => {
+                  setCreating(true)
+                  setSelected(null)
+                  setRoomIds([])
+                  setAvatarDraft(undefined)
+                  setDraftName('')
+                }}
+                className="shrink-0 rounded-full"
+              >
+                <Plus /> New agent
+              </Button>
+            )}
           </header>
           {error && (
             <p role="alert" className="text-sm text-destructive">
@@ -340,132 +367,54 @@ export function ManagementPage({
             </form>
           ) : mode === 'agents' ? (
             <div className="space-y-2">
-              {isOwner && (
-                <Button
-                  onClick={() => {
-                    setCreating(true)
-                    setSelected(null)
-                    setRoomIds([])
-                    setAvatarDraft(undefined)
-                    setDraftName('')
-                  }}
-                  className="mb-4"
-                >
-                  <Plus /> New agent
-                </Button>
-              )}
               {agentList.length === 0 && (
-                <p className="py-8 text-center text-muted-foreground">
-                  Your agents will appear here.
-                </p>
+                <div className="agent-empty rounded-2xl border border-dashed px-6 py-14 text-center">
+                  <Bot className="mx-auto mb-4 size-10 text-muted-foreground/50" />
+                  <p className="font-medium">Meet your next conversation.</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Connect an agent to start chatting and sharing files.
+                  </p>
+                </div>
               )}
-              {agentList.map((a) => (
-                <div
-                  className="flex items-start gap-3 border-b py-4 last:border-0"
-                  key={a.id}
-                >
-                  <ChatAvatar
-                    name={a.name}
-                    kind="agent"
-                    avatarId={a.avatar_id}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">{a.name}</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {a.disabled_at
-                        ? 'Disabled'
-                        : !a.paired
-                          ? 'Awaiting connection'
-                          : 'Paired'}
-                      {(a.paired || a.last_active_at) && (
-                        <>
-                          <span aria-hidden="true"> · </span>
-                          <AgentActivity value={a.last_active_at} now={now} />
-                        </>
-                      )}
-                    </p>
-                    {a.description && (
-                      <p className="mt-2 text-sm">{a.description}</p>
-                    )}
-                    {isOwner ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          disabled={!!a.disabled_at || pending}
-                          onClick={() =>
-                            perform(async () => {
-                              const room = await post<{ id: string }>(
-                                'conversations',
-                                { kind: 'direct', members: [a.id] },
-                              )
-                              onOpenChat(room.id)
-                            })
-                          }
-                        >
-                          Message
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelected(a)
-                            setCreating(true)
-                            setAvatarDraft(undefined)
-                            setDraftName(a.name)
-                          }}
-                        >
-                          Settings
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={pending}
-                          onClick={() =>
-                            setConfirm({
-                              title: a.paired
-                                ? `Reconnect ${a.name}?`
-                                : `Connect ${a.name}?`,
-                              description:
-                                'A new pairing prompt will replace any existing credential for this agent.',
-                              run: async () => {
-                                const data = await post<Enrollment>(
-                                  `agents/${a.id}/enrollment`,
-                                )
-                                setEnrollmentName(a.name)
-                                setEnrollment(data)
-                              },
-                            })
-                          }
-                        >
-                          <RefreshCw /> {a.paired ? 'Reconnect' : 'Connect'}
-                        </Button>
-                        {!a.disabled_at && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() =>
-                              setConfirm({
-                                title: `Disable ${a.name}?`,
-                                description:
-                                  'This immediately revokes access to Agent Chat. It does not stop work already running elsewhere.',
-                                run: async () => {
-                                  await api(`agents/${a.id}`, {
-                                    method: 'PATCH',
-                                    body: JSON.stringify({ disabled: true }),
-                                  })
-                                },
-                              })
-                            }
-                          >
-                            <Ban /> Disable
-                          </Button>
-                        )}
+              <div className="agent-list">
+                {agentList.map((a) => (
+                  <div className="agent-card" key={a.id}>
+                    <ChatAvatar
+                      name={a.name}
+                      kind="agent"
+                      avatarId={a.avatar_id}
+                      className="size-12 shrink-0 text-lg"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className="truncate text-base font-semibold">
+                          {a.name}
+                        </p>
+                        <span className="agent-status">
+                          {a.disabled_at
+                            ? 'Disabled'
+                            : a.paired
+                              ? 'Paired'
+                              : 'Not connected'}
+                        </span>
                       </div>
-                    ) : (
+                      {a.description && (
+                        <p className="mt-1 line-clamp-2 text-sm leading-5 text-muted-foreground">
+                          {a.description}
+                        </p>
+                      )}
+                      {(a.paired || a.last_active_at) && (
+                        <p className="mt-1.5 text-xs text-muted-foreground">
+                          <AgentActivity value={a.last_active_at} now={now} />
+                        </p>
+                      )}
+                    </div>
+                    <div className="agent-card-actions">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="mt-3"
+                        className="rounded-full"
+                        disabled={!!a.disabled_at || pending}
                         onClick={() =>
                           perform(async () => {
                             const room = await post<{ id: string }>(
@@ -476,22 +425,105 @@ export function ManagementPage({
                           })
                         }
                       >
-                        Message
+                        <MessageCircle className="size-4" />
+                        <span className="hidden sm:inline">Message</span>
+                        <span className="sr-only sm:hidden">
+                          Message {a.name}
+                        </span>
                       </Button>
-                    )}
+                      {isOwner && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="icon-sm"
+                              variant="ghost"
+                              className="rounded-full"
+                              aria-label={`More options for ${a.name}`}
+                              disabled={pending}
+                            >
+                              <MoreHorizontal />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="end"
+                            className="w-48 rounded-xl p-1.5"
+                          >
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                setSelected(a)
+                                setCreating(true)
+                                setAvatarDraft(undefined)
+                                setDraftName(a.name)
+                              }}
+                            >
+                              <Settings2 /> Agent settings
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setConfirm({
+                                  title: a.paired
+                                    ? `Reconnect ${a.name}?`
+                                    : `Connect ${a.name}?`,
+                                  description:
+                                    'A new pairing prompt will replace any existing credential for this agent.',
+                                  run: async () => {
+                                    const data = await post<Enrollment>(
+                                      `agents/${a.id}/enrollment`,
+                                    )
+                                    setEnrollmentName(a.name)
+                                    setEnrollment(data)
+                                  },
+                                })
+                              }
+                            >
+                              <RefreshCw />
+                              {a.paired ? 'Reconnect' : 'Connect'}
+                            </DropdownMenuItem>
+                            {!a.disabled_at && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onSelect={() =>
+                                    setConfirm({
+                                      title: `Disable ${a.name}?`,
+                                      description:
+                                        'This immediately revokes access to Agent Chat. It does not stop work already running elsewhere.',
+                                      run: async () => {
+                                        await api(`agents/${a.id}`, {
+                                          method: 'PATCH',
+                                          body: JSON.stringify({
+                                            disabled: true,
+                                          }),
+                                        })
+                                      },
+                                    })
+                                  }
+                                >
+                                  <Ban /> Disable agent
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           ) : (
             <div className="max-w-2xl space-y-6">
               <AppearanceSettings />
-              <div className="rounded-xl border p-4">
-                <p className="font-medium">{actor.name}</p>
-                <p className="text-sm text-muted-foreground">Your account</p>
+              <div className="flex items-center gap-3 rounded-2xl border p-5">
+                <ChatAvatar name={actor.name} />
+                <div>
+                  <p className="font-medium">{actor.name}</p>
+                  <p className="text-sm text-muted-foreground">Your account</p>
+                </div>
               </div>
               <form
-                className="space-y-4"
+                className="space-y-4 rounded-2xl border bg-card p-5 sm:p-6"
                 onSubmit={(event) => {
                   event.preventDefault()
                   const element = event.currentTarget
@@ -511,38 +543,47 @@ export function ManagementPage({
                 <h3 className="flex items-center gap-2 font-medium">
                   <KeyRound className="size-4" /> Change password
                 </h3>
-                <Input
-                  name="current"
-                  type="password"
-                  autoComplete="current-password"
-                  aria-label="Current password"
-                  placeholder="Current password"
-                  required
-                />
-                <Input
-                  name="next"
-                  type="password"
-                  autoComplete="new-password"
-                  aria-label="New password"
-                  placeholder={`New password · at least ${MIN_PASSWORD_LENGTH} characters`}
-                  minLength={MIN_PASSWORD_LENGTH}
-                  maxLength={MAX_PASSWORD_LENGTH}
-                  required
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="current-password">Current password</Label>
+                  <Input
+                    id="current-password"
+                    name="current"
+                    type="password"
+                    autoComplete="current-password"
+                    aria-label="Current password"
+                    placeholder="Current password"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="new-password">New password</Label>
+                  <Input
+                    id="new-password"
+                    name="next"
+                    type="password"
+                    autoComplete="new-password"
+                    aria-label="New password"
+                    placeholder={`New password · at least ${MIN_PASSWORD_LENGTH} characters`}
+                    minLength={MIN_PASSWORD_LENGTH}
+                    maxLength={MAX_PASSWORD_LENGTH}
+                    required
+                  />
+                </div>
                 <Button variant="outline" disabled={pending}>
                   Update password
                 </Button>
               </form>
-              <div className="border-t pt-5 text-sm text-muted-foreground space-y-2">
-                <p>Agent Chat {APP_VERSION} · Apache-2.0</p>
-                <p>
-                  You can view conversations between your agents. Agent
-                  credentials are separate from your account.
-                </p>
-                <p>
-                  Updates and backups are managed by the installation operator.
-                </p>
-              </div>
+              <footer className="flex flex-wrap items-center justify-between gap-3 border-t pt-5 text-sm text-muted-foreground">
+                <span>Agent Chat {APP_VERSION} · Apache-2.0</span>
+                <a
+                  className="rounded-sm underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                  href="https://github.com/vecbase-labs/agent-chat"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  GitHub ↗
+                </a>
+              </footer>
             </div>
           )}
         </div>

@@ -4,7 +4,7 @@ import {
   ArrowLeft,
   ArrowDown,
   ArrowUp,
-  File,
+  UploadCloud,
   Info,
   Loader2,
   Paperclip,
@@ -16,6 +16,7 @@ import { Button } from '#/components/ui/button'
 import { api, post } from '#/lib/api-client'
 import { cn } from '#/lib/utils'
 import { ChatAvatar } from './avatar'
+import { DraftFile } from './file-card'
 import { MessageBubble, dayLabel } from './message-bubble'
 import { MentionInput } from './mention-input'
 import { mentionIds } from '#/lib/mentions'
@@ -70,6 +71,9 @@ export function ChatWindow({
   const [reply, setReply] = useState<Message | null>(null)
   const [files, setFiles] = useState<Attachment[]>([])
   const [uploading, setUploading] = useState(false)
+  const uploadBusy = useRef(false)
+  const [uploadingName, setUploadingName] = useState('')
+  const [dragging, setDragging] = useState(false)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const pendingSend = useRef<{ signature: string; key: string } | null>(null)
@@ -198,14 +202,16 @@ export function ChatWindow({
     }
   }
   async function upload(chosen: FileList | null) {
-    if (!chosen?.length) return
+    if (!room.joined || !chosen?.length || uploadBusy.current || sending) return
     if (files.length + chosen.length > 4) {
       toast.error('Up to 4 attachments per message.')
       return
     }
+    uploadBusy.current = true
     setUploading(true)
     try {
       for (const file of Array.from(chosen)) {
+        setUploadingName(file.name)
         if (file.size > 10 * 1024 * 1024 || file.size === 0) {
           toast.error(`${file.name}: choose a non-empty file up to 10 MB.`)
           continue
@@ -223,14 +229,37 @@ export function ChatWindow({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed.')
     } finally {
+      uploadBusy.current = false
       setUploading(false)
+      setUploadingName('')
       if (fileInput.current) fileInput.current.value = ''
     }
   }
   const other =
     room.kind === 'direct' ? room.members.find((a) => a.id !== actor.id) : null
   return (
-    <section className="relative flex h-full min-w-0 flex-1 flex-col bg-[var(--chat-surface)]">
+    <section
+      className="relative flex h-full min-w-0 flex-1 flex-col bg-[var(--chat-surface)]"
+      onDragOver={(event) => {
+        if (event.dataTransfer.types.includes('Files')) {
+          event.preventDefault()
+          event.dataTransfer.dropEffect =
+            !room.joined || uploading || sending ? 'none' : 'copy'
+          setDragging(room.joined && !uploading && !sending)
+        }
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          setDragging(false)
+      }}
+      onDrop={(event) => {
+        if (event.dataTransfer.types.includes('Files')) {
+          event.preventDefault()
+          setDragging(false)
+          void upload(event.dataTransfer.files)
+        }
+      }}
+    >
       <header
         className={cn(
           'chat-header flex min-h-[76px] shrink-0 items-center gap-3 px-4 md:px-7',
@@ -448,10 +477,24 @@ export function ChatWindow({
         </div>
       )}
       {room.joined && (
-        <footer className="chat-footer shrink-0 px-3 pt-3 sm:px-6 md:px-8">
+        <footer
+          className="chat-footer relative shrink-0 px-3 pt-3 sm:px-6 md:px-8"
+          onPaste={(event) => {
+            if (event.clipboardData.files.length && !sending && !uploading) {
+              event.preventDefault()
+              void upload(event.clipboardData.files)
+            }
+          }}
+        >
+          {dragging && (
+            <div className="composer-drop-zone">
+              <UploadCloud className="size-6" />
+              <span>Drop files to attach</span>
+            </div>
+          )}
           <div className="mx-auto max-w-[960px]">
             {reply && (
-              <div className="mb-3 flex items-center gap-3 rounded-lg bg-muted p-3">
+              <div className="composer-reply mb-3 flex items-center gap-3 rounded-xl border-l-2 border-primary bg-muted/50 p-3">
                 <Reply className="size-4 shrink-0" />
                 <div className="min-w-0 flex-1 text-sm">
                   <span className="font-medium">
@@ -471,25 +514,31 @@ export function ChatWindow({
                 </Button>
               </div>
             )}
-            {files.length > 0 && (
-              <div className="mb-3 flex flex-wrap gap-2">
+            {(files.length > 0 || uploading) && (
+              <div className="draft-attachments">
                 {files.map((file) => (
-                  <div
+                  <DraftFile
                     key={file.id}
-                    className="flex max-w-full items-center gap-2 rounded-lg bg-muted p-2 text-sm"
-                  >
-                    <File className="size-4 shrink-0" />
-                    <span className="truncate">{file.name}</span>
-                    <button
-                      aria-label={`Remove ${file.name}`}
-                      onClick={() =>
-                        setFiles(files.filter((f) => f.id !== file.id))
-                      }
-                    >
-                      <X className="size-4" />
-                    </button>
-                  </div>
+                    file={file}
+                    disabled={sending}
+                    onRemove={() =>
+                      setFiles((current) =>
+                        current.filter((f) => f.id !== file.id),
+                      )
+                    }
+                  />
                 ))}
+                {uploading && (
+                  <div role="status" className="draft-file uploading-file">
+                    <Loader2 className="size-5 shrink-0 animate-spin text-primary" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm">
+                        {uploadingName}
+                      </span>
+                      <span className="file-caption">Uploading…</span>
+                    </span>
+                  </div>
+                )}
               </div>
             )}
             {error && (
@@ -512,6 +561,8 @@ export function ChatWindow({
                 variant="ghost"
                 size="icon-lg"
                 aria-label="Attach file"
+                title="Attach files · up to 4, 10 MB each"
+                className="composer-attach rounded-full text-muted-foreground hover:text-foreground"
                 disabled={uploading || sending}
                 onClick={() => fileInput.current?.click()}
               >
@@ -541,7 +592,7 @@ export function ChatWindow({
               <Button
                 size="icon-lg"
                 aria-label="Send message"
-                className="send-button size-11 shrink-0 rounded-full [&_svg]:size-5"
+                className="send-button size-10 shrink-0 rounded-full [&_svg]:size-5"
                 disabled={
                   sending || uploading || (!draft.text.trim() && !files.length)
                 }
