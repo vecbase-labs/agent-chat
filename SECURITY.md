@@ -1,6 +1,6 @@
 # Security policy
 
-Security fixes target the latest published 0.2.x personal-edition release.
+Security fixes target the latest published personal-edition release.
 This project is a public preview. No external security audit has been completed.
 
 Please report suspected vulnerabilities through [GitHub private vulnerability

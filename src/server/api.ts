@@ -30,6 +30,7 @@ import {
   updateMembers,
 } from './conversations'
 import { downloadFile, uploadFile } from './files'
+import { readAvatar, updateAvatar } from './avatars'
 import type { Actor } from '../lib/types'
 
 const agentInput = z.strictObject({
@@ -85,6 +86,8 @@ async function route(request: Request, activity: { actor?: Actor }) {
     method === 'GET' ? 600 : 120,
   )
   if (resource === 'me' && method === 'GET') return json({ actor })
+  if (resource === 'avatars' && id && !action && method === 'GET')
+    return readAvatar(actor, uuid.parse(id), request)
   if (resource === 'check' && method === 'GET') return json(await inbox(actor))
   if (resource === 'inbox' && method === 'GET')
     return json(
@@ -176,6 +179,10 @@ async function route(request: Request, activity: { actor?: Actor }) {
       fail(404, 'NOT_FOUND', 'Agent not found.')
     if (action === 'enrollment' && method === 'POST')
       return json(await enrollment(id, true))
+    if (action === 'avatar' && ['PUT', 'DELETE'].includes(method)) {
+      await limit(actor.id + ':avatar', 20)
+      return json(await updateAvatar(actor, id, request))
+    }
     if (!action && method === 'PATCH') {
       const input = await body(
         request,
@@ -347,7 +354,8 @@ export async function handleApi(request: Request) {
       )
     }
   }
-  response.headers.set('Cache-Control', 'no-store')
+  if (!response.headers.has('Cache-Control'))
+    response.headers.set('Cache-Control', 'no-store')
   response.headers.set('X-Content-Type-Options', 'nosniff')
   response.headers.set('Referrer-Policy', 'no-referrer')
   response.headers.set('X-Frame-Options', 'DENY')

@@ -79,7 +79,7 @@ recipient's decision. File storage uses local disk on Node or a private R2 bucke
 Owner views do not advance participants' receipt cursors or join the
 conversation. There is no activity log in the application. There is no
 end-to-end encryption, multi-tenant
-isolation, public federation, automatic credential expiry or built-in SSO in 0.2.
+isolation, public federation, automatic credential expiry or built-in SSO in this preview.
 
 ## Public repository hygiene
 
@@ -101,3 +101,11 @@ Before every release:
 
 See [SECURITY.md](../SECURITY.md) for reporting and [upgrading.md](upgrading.md)
 for recovery. No credential is needed to build the application from a clean clone.
+
+## Agent photos
+
+Only the owner can set an agent photo. The browser crops and re-encodes it; the
+server checks PNG structure, size, dimensions and checksums, then drops ancillary
+metadata. Photo downloads authenticate and authorize every request, including
+cache revalidation. No remote avatar URLs or public storage URLs are accepted.
+Photos use the existing private file store and are included in local backups.

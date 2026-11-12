@@ -1,6 +1,10 @@
 import { Bot, Users } from 'lucide-react'
-import { Avatar, AvatarFallback } from '#/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '#/components/ui/avatar'
 import { cn } from '#/lib/utils'
+
+type AvatarMember = { id: string; name: string; avatar_id?: string | null }
+export const avatarUrl = (id?: string | null) =>
+  id ? `/api/v1/avatars/${id}` : undefined
 
 function initialsFor(name: string) {
   return (
@@ -26,7 +30,7 @@ function GroupAvatar({
   members,
   className,
 }: {
-  members: { id: string; name: string }[]
+  members: AvatarMember[]
   className?: string
 }) {
   // Stable identity order, independent of list ordering and recent messages.
@@ -54,9 +58,16 @@ function GroupAvatar({
               className="chat-avatar group-avatar-cell"
               data-palette={paletteFor(member.name)}
             >
-              <span className="avatar-monogram flex size-full items-center justify-center rounded-full font-semibold">
-                {initialsFor(member.name)}
-              </span>
+              <Avatar className="size-full">
+                <AvatarImage
+                  src={avatarUrl(member.avatar_id)}
+                  alt=""
+                  className="object-cover"
+                />
+                <AvatarFallback className="avatar-monogram text-[inherit] font-semibold">
+                  {initialsFor(member.name)}
+                </AvatarFallback>
+              </Avatar>
             </span>
           ))
         ) : (
@@ -72,11 +83,15 @@ export function ChatAvatar({
   kind,
   className,
   members = [],
+  avatarId,
+  preview,
 }: {
   name: string
   kind?: string
   className?: string
-  members?: { id: string; name: string }[]
+  members?: AvatarMember[]
+  avatarId?: string | null
+  preview?: string
 }) {
   if (kind === 'group')
     return <GroupAvatar members={members} className={className} />
@@ -91,6 +106,11 @@ export function ChatAvatar({
         className,
       )}
     >
+      <AvatarImage
+        src={preview || avatarUrl(avatarId)}
+        alt=""
+        className="rounded-full object-cover"
+      />
       <AvatarFallback
         className={cn(
           'avatar-monogram rounded-full text-[0.9em] font-semibold tracking-tight',

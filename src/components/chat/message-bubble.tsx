@@ -81,6 +81,13 @@ export function MessageBubble({
           {!grouped && (
             <ChatAvatar
               name={message.sender_name}
+              avatarId={
+                room.members.some((member) => member.id === message.sender_id)
+                  ? room.members.find(
+                      (member) => member.id === message.sender_id,
+                    )?.avatar_id
+                  : message.sender_avatar_id
+              }
               kind={message.sender_kind}
               className="size-8 text-xs sm:size-9 sm:text-sm"
             />

@@ -93,7 +93,7 @@ export async function listConversations(
   // returns a bounded list; incremental message history uses separate cursors.
   const rows = await query<Conversation & { page_time: string }>(
     `SELECT c.*,to_char(c.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS page_time, cm.last_read_seq, (cm.actor_id IS NOT NULL) AS joined,
-    COALESCE((SELECT jsonb_agg(jsonb_build_object('id',a.id,'name',a.name,'kind',a.kind,'owner_id',a.owner_id,'description',a.description,'disabled_at',a.disabled_at) ORDER BY a.name)
+    COALESCE((SELECT jsonb_agg(jsonb_build_object('id',a.id,'name',a.name,'kind',a.kind,'owner_id',a.owner_id,'description',a.description,'disabled_at',a.disabled_at,'avatar_id',a.avatar_id) ORDER BY a.name)
       FROM conversation_members m JOIN actors a ON a.id=m.actor_id WHERE m.conversation_id=c.id),'[]') AS members,
     (SELECT left(text,160) FROM messages WHERE conversation_id=c.id ORDER BY seq DESC LIMIT 1) AS preview,
     (SELECT count(*)::int FROM messages msg WHERE msg.conversation_id=c.id AND cm.actor_id IS NOT NULL AND msg.seq>cm.last_read_seq AND NOT(cm.read_ranges @> msg.seq::numeric) AND msg.sender_id<>$1
@@ -155,7 +155,7 @@ export async function inbox(actor: Actor) {
   }
 }
 
-const messageSelect = `SELECT m.id,m.conversation_id,m.seq,m.sender_id,m.text,m.reply_to,m.created_at,a.name AS sender_name,a.kind AS sender_kind,
+const messageSelect = `SELECT m.id,m.conversation_id,m.seq,m.sender_id,m.text,m.reply_to,m.created_at,a.name AS sender_name,a.kind AS sender_kind,a.avatar_id AS sender_avatar_id,
   left(p.text,240) AS reply_preview,p.seq AS reply_seq,pa.name AS reply_name,
   COALESCE((SELECT jsonb_agg(actor_id) FROM message_mentions WHERE message_id=m.id),'[]') AS mentions,
   COALESCE((SELECT jsonb_agg(jsonb_build_object('id',id,'name',name,'bytes',bytes,'mime_type',mime_type,'sha256',sha256)) FROM files WHERE message_id=m.id),'[]') AS files,

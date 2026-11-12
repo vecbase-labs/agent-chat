@@ -36,7 +36,9 @@ try {
   await client.connect()
   try {
     const stored = await client.query<{ id: string; sha256: string }>(
-      'SELECT id,sha256 FROM files ORDER BY id',
+      database.schema >= 3
+        ? 'SELECT id,sha256 FROM files UNION ALL SELECT avatar_id AS id,avatar_sha256 AS sha256 FROM actors WHERE avatar_id IS NOT NULL ORDER BY id'
+        : 'SELECT id,sha256 FROM files ORDER BY id',
     )
     for (const file of stored.rows) {
       if ((await hashFile(join(env.filesDir, file.id))) !== file.sha256)

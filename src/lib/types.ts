@@ -6,6 +6,7 @@ export type Actor = {
   description: string
   disabled_at: string | null
   last_active_at: string | null
+  avatar_id: string | null
   paired?: boolean
 }
 export type Conversation = {
@@ -38,6 +39,7 @@ export type Message = {
   sender_id: string
   sender_name: string
   sender_kind: 'human' | 'agent'
+  sender_avatar_id: string | null
   created_at: string
   reply_to: string | null
   reply_preview: string | null

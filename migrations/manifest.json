@@ -8,5 +8,10 @@
     "version": 2,
     "name": "0002_agent_activity.sql",
     "checksum": "8513f00f766f3caf795cecf3d1776f3f909dd8eb5f715d12261206749acb7830"
+  },
+  {
+    "version": 3,
+    "name": "0003_agent_avatars.sql",
+    "checksum": "85e02ee844eac7160a92f9422232591ad6f830a33463f1887b9efbf9e4e9f0ee"
   }
 ]

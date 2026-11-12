@@ -30,6 +30,7 @@ import { authClient } from '#/lib/auth-client'
 import { APP_VERSION } from '#/lib/version'
 import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH } from '#/lib/password-policy'
 import { ChatAvatar } from './avatar'
+import { AvatarPicker } from './avatar-picker'
 import { AppearanceSettings } from './appearance'
 import { AgentActivity } from './agent-activity'
 import type { Actor, Conversation } from '#/lib/types'
@@ -61,6 +62,9 @@ export function ManagementPage({
     return () => window.clearInterval(timer)
   }, [mode])
   const [creating, setCreating] = useState(false)
+  const [avatarDraft, setAvatarDraft] = useState<Blob | null>()
+  const [photoProcessing, setPhotoProcessing] = useState(false)
+  const [draftName, setDraftName] = useState('')
   const [selected, setSelected] = useState<Actor | null>(null)
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
   const [enrollmentName, setEnrollmentName] = useState('')
@@ -106,6 +110,7 @@ export function ManagementPage({
   }
   async function createAgent(event: React.SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (photoProcessing || pending) return
     const form = new FormData(event.currentTarget)
     await perform(async () => {
       const name = String(form.get('name'))
@@ -117,6 +122,7 @@ export function ManagementPage({
             description: form.get('description'),
           }),
         })
+        await saveAvatar(selected.id)
         setSelected(null)
         setCreating(false)
         toast.success('Agent updated')
@@ -126,11 +132,31 @@ export function ManagementPage({
           description: form.get('description'),
           conversations: roomIds,
         })
+        try {
+          await saveAvatar(data.agentId)
+        } catch {
+          setError(
+            'Agent created, but the photo could not be saved. You can add it in Agent settings.',
+          )
+        }
         setEnrollmentName(name)
         setEnrollment(data)
         setCreating(false)
       }
     })
+  }
+  async function saveAvatar(id: string) {
+    if (avatarDraft === undefined) return
+    await api(
+      `agents/${id}/avatar`,
+      avatarDraft === null
+        ? { method: 'DELETE' }
+        : {
+            method: 'PUT',
+            headers: { 'Content-Type': 'image/png' },
+            body: avatarDraft,
+          },
+    )
   }
   async function copy(value: string) {
     try {
@@ -207,6 +233,14 @@ export function ManagementPage({
             </div>
           ) : creating ? (
             <form className="max-w-2xl space-y-5" onSubmit={createAgent}>
+              <AvatarPicker
+                name={draftName || selected?.name || 'Agent'}
+                avatarId={selected?.avatar_id}
+                value={avatarDraft}
+                onChange={setAvatarDraft}
+                disabled={pending}
+                onProcessing={setPhotoProcessing}
+              />
               <div className="space-y-2">
                 <Label htmlFor="agent-name">Name</Label>
                 <Input
@@ -216,6 +250,7 @@ export function ManagementPage({
                   maxLength={80}
                   autoFocus
                   defaultValue={selected?.name || ''}
+                  onChange={(event) => setDraftName(event.currentTarget.value)}
                   placeholder="e.g. Scout"
                 />
               </div>
@@ -290,6 +325,7 @@ export function ManagementPage({
                 <Button
                   type="button"
                   variant="ghost"
+                  disabled={pending || photoProcessing}
                   onClick={() => {
                     setCreating(false)
                     setSelected(null)
@@ -297,7 +333,7 @@ export function ManagementPage({
                 >
                   <ArrowLeft /> Back
                 </Button>
-                <Button disabled={pending}>
+                <Button disabled={pending || photoProcessing}>
                   {selected ? 'Save changes' : 'Create & connect'}
                 </Button>
               </div>
@@ -310,6 +346,8 @@ export function ManagementPage({
                     setCreating(true)
                     setSelected(null)
                     setRoomIds([])
+                    setAvatarDraft(undefined)
+                    setDraftName('')
                   }}
                   className="mb-4"
                 >
@@ -326,7 +364,11 @@ export function ManagementPage({
                   className="flex items-start gap-3 border-b py-4 last:border-0"
                   key={a.id}
                 >
-                  <ChatAvatar name={a.name} kind="agent" />
+                  <ChatAvatar
+                    name={a.name}
+                    kind="agent"
+                    avatarId={a.avatar_id}
+                  />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{a.name}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -368,6 +410,8 @@ export function ManagementPage({
                           onClick={() => {
                             setSelected(a)
                             setCreating(true)
+                            setAvatarDraft(undefined)
+                            setDraftName(a.name)
                           }}
                         >
                           Settings

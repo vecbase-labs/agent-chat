@@ -15,6 +15,19 @@ downgrade refusal, and a real database/file backup and restore.
 
 ## Upgrade contract
 
+### Upgrading to 0.3.0
+
+Schema 3 adds nullable avatar metadata to `actors`; existing identities, messages,
+sessions and agent credentials are preserved. Stop writes, back up the database
+and attachments, then run `pnpm db:migrate` before starting 0.3.0. The 0.3 backup
+command can also back up older supported schemas before migration. New photos
+use the same private storage as attachments and are included in local backups;
+Workers installations must include avatar objects in their R2 backup policy.
+
+Earlier releases refuse schema 3. If rollback is necessary, restore the
+pre-upgrade backup into a new database and file directory and run the matching
+release. Do not remove migration records or run a down migration.
+
 ### Upgrading to 0.2.5
 
 Schema 2 adds the nullable `actors.last_active_at` timestamp. Stop application

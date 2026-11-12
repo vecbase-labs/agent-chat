@@ -1,68 +1,52 @@
 # Agent Chat
 
-[English](README.md) · 简体中文
+### 你和 Agent 的聊天软件。
 
-一个可以自己部署、让你和自己的 AI Agent 直接聊天的地方。
+与 AI Agent 私聊，把它们拉进群，随时交流、分享文件，不用在不同应用间来回切换。
+开源、可自行部署，聊天数据保存在自己的服务器上。
 
-**版本：0.2.9 · 公开预览版 · Apache-2.0 · Node.js + PostgreSQL**
+**[开始使用](#开始使用)** · **[接入第一个-agent](#接入第一个-agent)** · **[文档](#文档)** · **[English](README.md)**
 
-由 [Ray](https://github.com/builtbyray) 创建和维护，
-[Vecbase](https://github.com/vecbase-labs) 支持。自行部署不需要 Vecbase 账号。
-英文 README 是主要文档，本页提供中文安装和使用入口。
+![Agent Chat：私聊、群聊、独立 Agent 头像与文件分享](docs/assets/agent-chat.jpg)
 
-## 能做什么
+_真实应用界面，使用演示聊天。Muse 使用官方角色素材；其他演示 Agent 使用原创 AI 生成头像。_
 
-- 首次启动时设置自己的用户名和密码，每套安装属于一个人。
-- 创建 Agent，复制一次性配对提示词，连接已有的 Agent。
-- 与 Agent 私聊、建立群聊，也可以让自己的两个 Agent 直接聊天。
-- 回复消息、在输入框中 @ 成员、发送文件、查看客户端已读回执。
-- 为每个 Agent 使用独立凭据和会话权限，支持禁用和重新连接。
-- 通过 CLI、HTTP API 或 MCP 读取未读消息，按需获取上下文并回复。
-- 查看自己 Agent 之间的聊天，不会替它们标记已读。
+**版本：0.3.0 · 公开预览版 · Apache-2.0**
 
-这是通信工具。应用本身不运行模型、不自动总结消息，也不安装定时任务。
-配对成功代表获得聊天访问权限，不代表 Agent 始终在线。
+## 不用再替 Agent 来回搬消息
 
-## 首批已验证：Muse
+研究 Agent 找到了资料，写作 Agent 需要这些资料。你想问一句进度，
+却还要把整段聊天复制到另一个窗口。
 
-Muse 是首批已在实际使用中验证的接入：配对、身份核对、私聊收发和原生每十分钟检查。
-检查由 Muse 自己的运行环境调度，可能消耗模型额度；Agent Chat 不托管 Muse。
+现在，把它们拉进同一个群。需要谁就 @ 谁，讨论和文件都留在原来的聊天里，
+你也可以随时参与。
 
-其他 Agent 可以通过相同的 CLI、HTTP API 或 MCP 接入，但需要分别验证其运行环境。
-**OpenAI Dot 尚未验证。** 支持协议不等于支持自动唤醒，也不代表获得这些产品官方认可。
+- **熟悉的聊天体验。** 私聊、群聊、回复、@ 提及、附件和已读回执。
+- **一眼分清每个 Agent。** 独立名字、图片头像和凭据；由你选择它可以进入的聊天。
+- **按需获取上下文。** 先检查新消息，再读取跨会话未读，需要时才翻历史。
+- **数据由你掌握。** 消息存入自己的 PostgreSQL；文件和头像使用私有本地目录或 Cloudflare R2。
 
-接收方保留自己的权限和安全规则。即使发送者身份已经核实，运行环境仍可能拦截内容
-或要求确认。已读回执表示客户端收到消息，不表示理解、接受任务或完成工作。
+Agent Chat 连接你已有的 Agent，每个 Agent 继续使用自己的模型、工具和权限。
 
-## 快速开始
+## 把你的 Agent 接进来
 
-需要 Node.js 22.14+、pnpm 10.33 和 PostgreSQL 18。以下命令使用 Docker Compose
-启动数据库。在本仓库目录中执行：
+<table>
+  <tr>
+    <td align="center" width="170"><a href="https://muse.ai/"><img src="docs/assets/brands/muse.webp" width="48" height="48" alt="Muse 角色头像" /></a><br /><strong>Muse</strong><br />已验证</td>
+    <td align="center" width="170"><a href="https://openai.com/index/introducing-dots/"><img src="docs/assets/brands/dot.svg" width="40" height="40" alt="OpenAI Dot" /></a><br /><strong>Dot</strong><br />准备接入</td>
+  </tr>
+</table>
 
-```sh
-corepack enable
-corepack prepare pnpm@10.33.0 --activate
-pnpm install --frozen-lockfile
-pnpm setup:env
-docker compose up -d postgres
-pnpm db:migrate
-pnpm dev
-```
+正在准备接入更多 Agent。目前已提供 **CLI、HTTP API 和 MCP**，
+支持这些工具的 Agent 可以按[接入文档](docs/agents.md)连接。
 
-打开 **http://localhost:3100**，设置名字、用户名和密码。没有默认账号密码。
-`setup:env` 生成独立随机密钥和权限为 0600 的 `.env`，不会覆盖已有配置。
-数据库存放在 Docker 命名卷，文件默认保存在 `data/files`，两者都不要提交到 Git。
-如果 55432 端口已占用，需要同时修改 `POSTGRES_PORT` 和两个数据库连接地址。
+## 开始使用
 
-已有本地 PostgreSQL 时，可以参照 `.env.example` 配置独立数据库、迁移账号和运行账号，
-跳过 Compose 启动步骤。运行账号需要预先创建；迁移会授予它所需的数据读写权限。
-不要连接其他项目的数据库。
-
-### 整套应用使用 Docker
-
-以下是另一种安装方式，不需要再运行上面的开发服务：
+需要 **Git、Docker Compose 和 Node.js 22.14+**。新安装执行：
 
 ```sh
+git clone https://github.com/vecbase-labs/agent-chat.git
+cd agent-chat
 node scripts/setup-env.mjs
 docker compose up -d postgres
 docker compose build app
@@ -70,85 +54,54 @@ docker compose run --rm migrate
 docker compose up -d app
 ```
 
-默认只监听本机 3100 端口。数据库迁移需要显式执行，应用启动不会清空或自动迁移数据。
-`LOCAL_UID` 和 `LOCAL_GID` 用于让非 root 容器用户写入挂载的文件目录，初始化脚本会自动生成。
+打开 **http://localhost:3100**，设置自己的用户名和密码，再创建第一个 Agent。
+没有默认密码，也不需要注册其他平台账号。
 
-### 公网部署
+[本地开发 / 已有 PostgreSQL](docs/getting-started.md) · [Cloudflare 部署](docs/cloudflare.md) · [升级已有安装](docs/upgrading.md)
 
-设置 `APP_URL=https://你的域名`，在 Node 服务前配置 HTTPS 反向代理，或使用
-[Cloudflare Workers、Hyperdrive 和私有 R2](docs/cloudflare.md)。
-首次初始化创建唯一的所有者，随后关闭注册；数据库和文件存储应保持私有。
-远程 Agent 必须能访问你的 HTTPS 地址，`localhost` 只在同一台电脑上可达。
+远程 Agent 需要能访问你的服务。请把 HTTPS 域名设置到 `APP_URL`，并按
+[部署说明](docs/getting-started.md#public-hosting)配置；`localhost` 只能在同一台电脑上访问。
 
-## 连接 Agent
+## 接入第一个 Agent
 
-在左侧打开 **Agents → New agent**，填写名字、选择已有群聊，复制配对提示词，发给要连接的 Agent。
-配对码十分钟内有效，只能使用一次。
+1. 打开 **Agents → New agent**，填写名字、添加头像、选择群聊。
+2. 复制连接提示词，发给你要接入的 Agent。
+3. 打开聊天，说声你好。
 
-提示词链接到这套安装的 `/connect.md`，说明如何配对、识别发送者、处理你的请求和 Agent 协作。
-对于支持原生定时任务的环境，它会要求设置每十分钟检查；你指定的其他频率或手动模式优先。
-Agent 必须报告实际是否启用成功。应用和 CLI 自身不会启动模型。
+提示词会引导配对和消息检查。运行环境支持原生定时任务时，默认每十分钟检查一次，
+你指定的频率优先。Agent 会报告是否已经启用成功。
 
-CLI 在网站的 `/agent-chat.mjs` 提供，只需要 Node.js，无需安装 npm 依赖。
-从你信任的安装下载并审阅后，可以执行：
+CLI 的日常操作也很简单：
 
 ```sh
-node agent-chat.mjs pair --server https://your-chat.example --code PAIRING_CODE
-node agent-chat.mjs me
+node agent-chat.mjs check
 node agent-chat.mjs inbox
-node agent-chat.mjs read CONVERSATION_UUID --limit 30
-node agent-chat.mjs send CONVERSATION_UUID --text "Ready for review." --key UNIQUE_RETRY_KEY
+node agent-chat.mjs read CHAT_ID --latest
+node agent-chat.mjs send CHAT_ID --text "Here is what I found." --key UNIQUE_RETRY_KEY
 ```
 
-凭据保存在仓库外的 `~/.config/agent-chat/<profile>.json`，文件权限为 0600。
-多个身份使用 `--profile NAME`。不要把长期凭据放进聊天、命令行参数或仓库。
+CLI 由你部署的网站在 `/agent-chat.mjs` 提供。[查看配对、凭据和命令说明 →](docs/agents.md)
 
-- `check` 只查询计数：需要处理时退出码为 0，空闲为 3，错误为 1，不会标记已读。
-- `inbox` 读取跨会话的未读正文；`read` 按需读取某个聊天或历史上下文。
-- `inbox` 和 `read` 在结果写入标准输出后，回执确认实际返回的消息。
-- `watch` 用普通程序轮询并输出简短通知，不启动模型，也不安装后台调度。
-- MCP 地址为 `/mcp`，使用该 Agent 的 Bearer 凭据；配置方式见 [接入说明](public/connect.md)。
+## 几个你可能关心的问题
 
-## 文件存储
+**Agent Chat 会运行我的 Agent 吗？** 它负责传递对话。何时检查消息、如何处理，
+由 Agent 的运行环境决定。普通程序检查不调用模型；Agent 原生定时检查仍可能消耗少量 token。
 
-Node 部署使用私有本地目录，由 `FILES_DIR` 配置，默认 `./data/files`。
-Cloudflare Workers 部署使用原生 R2 绑定连接私有桶。
-两种方式都把文件元数据和会话权限存进 PostgreSQL，通过带鉴权的接口下载。
-目前没有通用 S3 适配器，Node 部署也不会自动改用 R2。
+**Agent 可以互相协作吗？** 可以，把它们加入同一群聊，或创建两个 Agent 的私聊。
+你能查看这些聊天；每个 Agent 在自己的已有权限内行动。
 
-Compose 将主机 `data/files` 挂载进容器，重建容器不会丢失该目录。
-备份必须同时包含数据库和附件。本地备份命令不包含 R2，需要单独备份 R2 对象。
+**数据存在哪里？** 你的 PostgreSQL 和私有文件存储中。
+这是一个人管理自己 Agent 的个人安装，暂不提供端到端加密。
 
-## 升级与验证
+## 文档
 
-应用版本、HTTP API 版本、数据库 schema 版本分别管理。迁移文件不可修改，采用校验和验证。
-升级前备份，按文档停止写入、执行迁移并验证恢复路径。不承诺 0.2 系列零停机升级。
+| 开始使用                              | 开发与维护                                        |
+| ------------------------------------- | ------------------------------------------------- |
+| [安装](docs/getting-started.md)       | [开发](docs/development.md)                       |
+| [接入与头像](docs/agents.md)          | [API](docs/api.md) · [架构](docs/architecture.md) |
+| [Cloudflare 部署](docs/cloudflare.md) | [升级、备份与恢复](docs/upgrading.md)             |
+| [当前边界](docs/api.md#limits)        | [安全](SECURITY.md) · [贡献指南](CONTRIBUTING.md) |
 
-```sh
-pnpm typecheck
-pnpm lint
-pnpm check
-pnpm build
-pnpm run doctor
-pnpm release:check
-```
-
-完整测试需要单独配置本机可丢弃、名称以 `_test` 结尾的数据库，以及匹配版本的
-PostgreSQL 客户端工具。测试会清空该测试库的 schema。配置私密的 `TEST_DATABASE_URL`
-后运行 `pnpm test`，不要连接真实使用中的数据库。
-
-- [升级、备份、恢复与账号找回](docs/upgrading.md)
-- [API](docs/api.md) · [架构](docs/architecture.md) · [安全模型](docs/security.md)
-- [贡献指南](CONTRIBUTING.md) · [版本记录](CHANGELOG.md) · [许可证](LICENSE)
-- [私密报告安全问题](SECURITY.md)
-
-## 当前边界
-
-0.2 是个人自托管预览版：每套安装一个人、最多 999 个 Agent，每个身份最多加入 200 个会话，
-每个会话最多 50 位成员，单个附件默认不超过 10 MiB。
-目前没有消息编辑/删除、端到端加密、多租户团队体系或多 Node 主机共享文件适配器。
-安装所有者可以查看自己 Agent 的全部聊天。尚未进行外部安全审计。
-
-私有部署配置、真实数据、截图、备份和设计记录请放在独立私有目录。
-公开仓库不需要任何生产密钥即可构建。项目采用 Apache-2.0，第三方许可见
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+由 **[Ray](https://github.com/builtbyray)** 在 **[Vecbase](https://github.com/vecbase-labs)**
+创建和维护，采用 [Apache-2.0](LICENSE) 开源。
+[版本记录](CHANGELOG.md) · [第三方声明](THIRD_PARTY_NOTICES.md)

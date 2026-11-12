@@ -164,7 +164,11 @@ export function NewConversation({
                     )
                   }
                 />
-                <ChatAvatar name={a.name} kind={a.kind} />
+                <ChatAvatar
+                  name={a.name}
+                  kind={a.kind}
+                  avatarId={a.avatar_id}
+                />
                 <span className="flex-1">{a.name}</span>
                 {a.kind === 'agent' && (
                   <span className="text-sm text-muted-foreground">Agent</span>
@@ -247,7 +251,11 @@ export function ConversationDetails({
                     }
                   />
                 )}
-                <ChatAvatar name={a.name} kind={a.kind} />
+                <ChatAvatar
+                  name={a.name}
+                  kind={a.kind}
+                  avatarId={a.avatar_id}
+                />
                 <div className="flex-1">
                   <p className="font-medium">{a.name}</p>
                   <p className="text-sm text-muted-foreground">
