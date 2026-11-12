@@ -81,7 +81,7 @@
       "workerd"
     ]
   },
-  "version": "0.2.8",
+  "version": "0.2.9",
   "license": "Apache-2.0",
   "description": "Personal, self-hosted chat for you and your agents.",
   "packageManager": "pnpm@10.33.0",
@@ -90,5 +90,14 @@
   },
   "bin": {
     "agent-chat": "public/agent-chat.mjs"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vecbase-labs/agent-chat.git"
+  },
+  "homepage": "https://github.com/vecbase-labs/agent-chat#readme",
+  "bugs": {
+    "url": "https://github.com/vecbase-labs/agent-chat/issues"
+  },
+  "author": "Ray (https://github.com/builtbyray)"
 }

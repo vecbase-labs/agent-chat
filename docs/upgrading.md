@@ -8,7 +8,6 @@ Release 0.2.0 establishes the personal edition's schema 1 baseline. The earlier
 unreleased team prototype used a different schema history. It requires a fresh
 database and file directory; there is no automatic conversion or reset. Keep a
 backup if you need its data. Do not point this release at an existing 0.1 database.
-The local development reset was explicitly authorized, not an upgrade behavior.
 
 Future personal-edition releases append checksummed migrations and must verify
 supported upgrade paths. Current tests verify replay, changed-history rejection,

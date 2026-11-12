@@ -1,10 +1,20 @@
 .git
 .env
 .env.*
+.dev.vars*
+*.local
+AGENTS.local.md
+wrangler.local.jsonc
+.wrangler
+.cloudflare
+.aws
 node_modules
+dist
+dist-ssr
 .output
 .nitro
 .tanstack
+.vinxi
 data
 backups
 design
@@ -16,3 +26,4 @@ playwright-report
 *.dump
 *.pem
 *.key
+.DS_Store

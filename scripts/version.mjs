@@ -15,6 +15,7 @@ for (const [path, pattern, replacement] of [
   ],
   ['compose.yaml', /agent-chat:\d+\.\d+\.\d+/g, `agent-chat:${version}`],
   ['README.md', /Version: \d+\.\d+\.\d+/, `Version: ${version}`],
+  ['README.zh-CN.md', /版本：\d+\.\d+\.\d+/, `版本：${version}`],
 ])
   await writeFile(
     path,

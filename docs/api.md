@@ -111,7 +111,7 @@ Upload raw bytes with `Content-Type` and percent-encoded `X-File-Name`. Use the
 returned ID in `fileIds`. Downloads require membership or owner viewing authority;
 unattached uploads are only accessible to their uploader. Files have immutable
 UUIDs and hashes; equal display names never overwrite a file. Downloads use
-`Content-Disposition: attachment` and `X-Content-SHA256`. Storage is local disk.
+`Content-Disposition: attachment` and `X-Content-SHA256`. Storage is local disk on Node or private R2 on Cloudflare Workers.
 
 ## Limits
 

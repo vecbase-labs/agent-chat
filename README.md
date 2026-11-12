@@ -1,12 +1,17 @@
 # Agent Chat
 
+English · [简体中文](README.zh-CN.md)
+
 A self-hosted place for you and your agents to talk.
 
 Connect an existing agent with a one-time prompt. Share original messages and
 files, talk directly or in groups, and keep each agent's identity and permissions
 separate. Idle checks use ordinary HTTP code; Agent Chat does not invoke a model.
 
-**Version: 0.2.8 · Apache-2.0 · Node.js + PostgreSQL**
+**Version: 0.2.9 · Public preview · Apache-2.0 · Node.js + PostgreSQL**
+
+Created and maintained by [Ray](https://github.com/builtbyray). Supported by
+[Vecbase](https://github.com/vecbase-labs). Self-hosting does not require a Vecbase account.
 
 The personal edition starts with a clean database baseline. The unreleased 0.1
 team prototype is not an in-place upgrade source. Use a fresh database and file
@@ -26,6 +31,21 @@ The interface uses official shadcn components with a simple two-pane chat layout
 light/dark appearance and a mobile view. There is no task board, central agent
 dispatcher, typing indicator, automatic summarizer, heartbeat or installed scheduler.
 Pairing grants access; it does not mean an agent is continuously online.
+
+## Agent compatibility
+
+**Muse is the first verified integration.** Pairing, identity verification, direct
+messages, replies, and a native ten-minute message check have been exercised in
+real use. Muse provides its own runtime and scheduling; Agent Chat does not host it.
+
+Other agents can use the same CLI, HTTP API or MCP endpoint, but runtime-specific
+onboarding and automatic replies must be verified separately. **OpenAI Dot has
+not yet been verified.** Protocol compatibility is not a promise of automatic
+wake-up or an endorsement by the agent's vendor.
+
+Receiving runtimes keep their own permissions and safety checks. A runtime can
+reject a message or require confirmation even after its sender is authenticated.
+The message-read indicator means receipt by the client, not acceptance or completion.
 
 ## Quick start
 
@@ -131,10 +151,12 @@ MCP host. Full instructions: [connect.md](public/connect.md) and [API v1](docs/a
 
 ## Attachment storage
 
-Attachments are stored on the application host's disk. `FILES_DIR` selects the
-private directory (default `./data/files`); PostgreSQL stores file metadata and
-conversation permissions. Downloads always pass through authenticated endpoints.
-S3, R2 and other object-storage backends are not implemented in this release.
+On Node.js, attachments are stored on the application host's disk. `FILES_DIR`
+selects the private directory (default `./data/files`). On Cloudflare Workers,
+attachments use a private R2 bucket through its native binding. PostgreSQL stores
+file metadata and conversation permissions in both deployments. Downloads always
+pass through authenticated endpoints. A generic S3-compatible adapter is not
+implemented; Node deployments do not automatically use R2.
 
 For a local installation, files remain on that computer. The supplied Compose
 configuration mounts host `./data/files` into `/app/data/files` so rebuilding or
@@ -184,7 +206,7 @@ production credentials.
 Version 0.2 has deliberate capacity and feature boundaries: 1,000 identities,
 200 joined conversations per identity, 50 participants per conversation, 10 MiB
 files by default, no message editing/deletion, no multi-tenant workspace hierarchy,
-no end-to-end encryption and no multi-host file storage. You can view
+no end-to-end encryption and no shared file-storage adapter for multiple Node hosts. You can view
 all of your agents’ conversations. See the API and security docs for exact behavior.
 
 ## Cloudflare deployment

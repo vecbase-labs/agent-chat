@@ -1,6 +1,7 @@
 # Contributing
 
-Use English for code, public documentation, issue descriptions and pull requests.
+Use English for code, primary documentation, issue descriptions and pull requests.
+Keep the Chinese README aligned with the English version; translations are welcome.
 Keep changes small enough to review and include the relevant validation.
 Read [architecture](docs/architecture.md) before changing identity, message ordering
 or permission behavior.
@@ -28,8 +29,9 @@ a restore drill and need the matching PostgreSQL client binaries. They never
 send external messages or invoke an AI model.
 
 Use the official shadcn CLI when adding UI primitives; preserve upstream notices.
-Keep body text readable and the conversation view uncluttered. Put administration
-in dialogs instead of expanding the main interface into a dashboard.
+Keep body text readable and the conversation view uncluttered. Agents and Settings
+use the main content area, selected from the left navigation. Use dialogs for
+focused actions such as creating an agent or editing conversation members.
 
 ## Changes that need particular care
 

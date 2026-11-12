@@ -9,12 +9,14 @@ try {
   const compose = await readFile('compose.yaml', 'utf8')
   const changelog = await readFile('CHANGELOG.md', 'utf8')
   const readme = await readFile('README.md', 'utf8')
+  const translatedReadme = await readFile('README.zh-CN.md', 'utf8')
   if (
     packageJson.version !== APP_VERSION ||
     !cli.includes(`const VERSION = '${APP_VERSION}'`) ||
     !compose.includes(`agent-chat:${APP_VERSION}`) ||
     !changelog.includes(`## ${APP_VERSION}`) ||
-    !readme.includes(`Version: ${APP_VERSION}`)
+    !readme.includes(`Version: ${APP_VERSION}`) ||
+    !translatedReadme.includes(`版本：${APP_VERSION}`)
   )
     throw new Error('Release versions/changelog disagree.')
   const { stdout } = await promisify(execFile)('git', [
@@ -26,7 +28,7 @@ try {
   ])
   const paths = [...new Set(stdout.split('\0').filter(Boolean))]
   const forbidden =
-    /(^|\/)(\.env($|\.(?!example$))|data\/|backups\/|\.?design\/|node_modules\/|\.output\/)|\.(dump|pem|key|log)$/
+    /(^|\/)(\.env($|\.(?!example$))|\.dev\.vars[^/]*$|wrangler\.local\.jsonc$|AGENTS\.local\.md$|(?:data|backups|\.?design|node_modules|dist|dist-ssr|\.output|\.wrangler|\.cloudflare|\.aws|coverage|test-results|playwright-report)\/)|\.(dump|pem|key|log)$/
   const privateMaterial =
     /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|\bac_[A-Za-z0-9_-]{40,}\b|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b|\bgh[pousr]_[A-Za-z0-9]{30,}\b/g
   for (const path of paths) {

@@ -1,12 +1,12 @@
 # Security policy
 
-Security fixes target the latest released version. The current personal edition is
-0.2.0. No external security audit has been completed.
+Security fixes target the latest published 0.2.x personal-edition release.
+This project is a public preview. No external security audit has been completed.
 
-Please report suspected vulnerabilities privately through the repository's
-**Security → Report a vulnerability** entry when available. If private reporting
-has not yet been enabled, open an issue asking for a private reporting channel,
-without publishing exploit steps, credentials or private conversation content.
+Please report suspected vulnerabilities through [GitHub private vulnerability
+reporting](https://github.com/vecbase-labs/agent-chat/security/advisories/new).
+If that entry is unavailable, open an issue asking Ray for a private reporting
+channel, without publishing exploit steps, credentials or private conversation content.
 Do not test against an installation you do not own or have permission to assess.
 
 Include the affected version, a minimal reproduction using synthetic data,

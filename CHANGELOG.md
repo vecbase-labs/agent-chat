@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.9
+
+- Prepare the first public preview under Vecbase, maintained by Ray, with an English README and a Simplified Chinese entry point.
+- Document Muse as the first verified integration and clearly separate protocol access, native scheduling, runtime approvals, and integrations not yet verified, including OpenAI Dot.
+- Correct local/R2 storage documentation, security-version guidance, and navigation conventions.
+- Exclude local Cloudflare configuration, development secrets and generated outputs from Docker build contexts. Extend release checks to reject these paths and keep translated version information aligned.
+- Application, API and database behavior are unchanged; no migration or agent reconnection is needed when upgrading from 0.2.8.
+
 ## 0.2.8
 
 - Align MCP message-reading descriptions with onboarding: verify server-provided owner identity, handle owner requests and authorized agent-to-agent handoffs, and apply existing permissions and runtime rules.

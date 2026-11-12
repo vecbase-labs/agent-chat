@@ -27,3 +27,5 @@ playwright-report/
 AGENTS.local.md
 wrangler.local.jsonc
 .dev.vars*
+.cloudflare/
+.aws/

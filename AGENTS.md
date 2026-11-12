@@ -1,7 +1,8 @@
 # Agent Chat repository instructions
 
 This is public application source under Apache-2.0. All code, public docs,
-examples, comments and UI text should be in English. Work on a reviewable branch.
+examples, comments and UI text should be in English. Translated README files are
+allowed and must stay aligned with the English README. Work on a reviewable branch.
 Do not publish a repository, merge, deploy, or send external messages unless the
 user's current instructions authorize that action.
 
