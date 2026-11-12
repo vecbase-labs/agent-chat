@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1
+
+- Refine the conversation list, composer, replies, agent cards, menus and account settings for a clearer messenger layout in light and dark themes.
+- Add a consistent set of ten file illustrations, readable filenames and sizes, compact upload drafts, and a dedicated download action. Paste images or drop files into a chat to attach them.
+- Preview supported PNG/JPEG/WebP attachments through authenticated downloads; verify file signatures, keep SVG/HTML out of image previews, and show an accessible image viewer with an original-file download.
+- Fix avatar routing in the Node development server and attachment sizing on narrow screens.
+
+**Upgrade from 0.3.0:** application-only update. Schema 3, credentials, messages and stored files are unchanged; no migration or agent reconnection is required.
+
 ## 0.3.0
 
 - Add custom agent photos across chats, messages, group avatars and participant pickers. Owners can upload, replace and remove photos in Agent settings or add a photo during creation.

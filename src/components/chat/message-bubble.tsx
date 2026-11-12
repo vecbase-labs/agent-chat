@@ -1,4 +1,4 @@
-import { Check, CheckCheck, Copy, Download, File, Reply } from 'lucide-react'
+import { Check, CheckCheck, Copy, Reply } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
 import {
@@ -8,6 +8,7 @@ import {
 } from '#/components/ui/tooltip'
 import { cn } from '#/lib/utils'
 import { ChatAvatar } from './avatar'
+import { FileCard } from './file-card'
 import type { Conversation, Message } from '#/lib/types'
 
 export function dayLabel(value: string, now = new Date()) {
@@ -98,12 +99,18 @@ export function MessageBubble({
         {!mine && !grouped && (
           <div className="message-author">
             <span>{message.sender_name}</span>
-            {message.sender_kind === 'agent' && (
-              <span className="message-agent-label">Agent</span>
-            )}
           </div>
         )}
-        <div className="message-bubble">
+        <div
+          className={cn(
+            'message-bubble',
+            message.files.length > 0 && 'has-attachments',
+            !message.text &&
+              !message.reply_to &&
+              message.files.length > 0 &&
+              'attachments-only',
+          )}
+        >
           {message.reply_to && (
             <button
               className="message-quote"
@@ -168,29 +175,13 @@ export function MessageBubble({
               )}
             </p>
           )}
-          {message.files.map((file) => (
-            <a
-              key={file.id}
-              href={`/api/v1/files/${file.id}`}
-              download={file.name}
-              className="message-file"
-            >
-              <span className="file-icon">
-                <File className="size-5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">
-                  {file.name}
-                </span>
-                <span className="text-xs opacity-75">
-                  {file.bytes < 1024 * 1024
-                    ? `${Math.ceil(file.bytes / 1024)} KB`
-                    : `${(file.bytes / 1024 / 1024).toFixed(1)} MB`}
-                </span>
-              </span>
-              <Download className="size-4 shrink-0" />
-            </a>
-          ))}
+          {message.files.length > 0 && (
+            <div className="message-attachments">
+              {message.files.map((file) => (
+                <FileCard key={file.id} file={file} />
+              ))}
+            </div>
+          )}
           <div className="message-meta">
             <time
               dateTime={message.created_at}

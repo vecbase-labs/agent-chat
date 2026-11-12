@@ -87,7 +87,7 @@ export function MentionInput({
           id={listId}
           role="listbox"
           aria-label="Mention a participant"
-          className="absolute bottom-full left-0 z-30 mb-3 max-h-64 w-full min-w-48 overflow-y-auto rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-lg sm:w-80"
+          className="absolute bottom-full left-0 z-30 mb-3 max-h-64 w-full min-w-48 overflow-y-auto rounded-2xl border bg-popover p-2 text-popover-foreground shadow-lg sm:w-80"
           onPointerDown={(event) => event.preventDefault()}
         >
           {candidates.length ? (

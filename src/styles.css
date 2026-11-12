@@ -27,7 +27,7 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
+  --radius: 0.75rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.141 0.005 285.823);
   --sidebar-primary: oklch(0.21 0.006 285.885);
@@ -122,11 +122,11 @@
   --primary-foreground: #fff;
   --ring: var(--chat-color);
   --chat-outgoing: var(--chat-color);
-  --chat-incoming: #f2f4f7;
+  --chat-incoming: #f3f4f6;
   --chat-selected: color-mix(in srgb, var(--chat-color) 9%, transparent);
   --muted-foreground: #697386;
   --sidebar: #f8f9fb;
-  --chat-rail: #f1f3f6;
+  --chat-rail: #f5f6f8;
   --chat-avatar-bg: #e4ecff;
   --chat-avatar-fg: #3557a0;
 }
@@ -393,34 +393,209 @@
   border-color: #ffffffb3;
   background: #ffffff18;
 }
-.message-file {
+.message-attachments {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: 8px;
+  margin-top: 10px;
+}
+.message-attachments:first-child {
+  margin-top: 0;
+}
+.message-bubble.attachments-only {
+  padding: 6px 6px 7px;
+}
+.attachments-only .message-meta {
+  padding-inline: 7px;
+}
+.attachment-card {
+  width: 340px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 13px;
+  background: var(--card);
+  color: var(--foreground);
+}
+.attachment-download {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  text-decoration: none;
+  transition: background-color 150ms;
+}
+.attachment-download:hover {
+  background: color-mix(in srgb, var(--foreground) 3%, var(--card));
+}
+.attachment-download:focus-visible,
+.attachment-preview:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -3px;
+  border-radius: 12px;
+}
+.file-type-icon {
+  display: block;
+  flex-shrink: 0;
+  width: 42px;
+  height: 50px;
+  object-fit: contain;
+}
+.file-details {
+  display: block;
+  min-width: 0;
+  flex: 1;
+}
+.file-name {
+  display: flex;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.file-caption {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.file-download-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  color: var(--muted-foreground);
+  transition:
+    color 150ms,
+    background 150ms;
+}
+.attachment-download:hover .file-download-icon {
+  background: var(--chat-selected);
+  color: var(--primary);
+}
+.attachment-preview {
+  position: relative;
+  display: grid;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  place-items: center;
+  background: var(--muted);
+  cursor: zoom-in;
+}
+.attachment-preview:disabled {
+  cursor: default;
+}
+.attachment-preview img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.preview-zoom {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #0009;
+  color: white;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 150ms;
+}
+.attachment-preview:hover .preview-zoom,
+.attachment-preview:focus-visible .preview-zoom {
+  opacity: 1;
+}
+.preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.draft-attachments {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 12px;
+  scrollbar-width: thin;
+}
+.draft-file {
+  display: flex;
+  width: 245px;
+  max-width: 100%;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 8px;
+  background: var(--card);
+}
+.draft-file .file-type-icon {
+  width: 34px;
+  height: 40px;
+}
+.uploading-file {
+  padding: 12px;
+}
+.composer-drop-zone {
+  position: absolute;
+  z-index: 40;
+  inset: 0 12px 8px;
   display: flex;
   align-items: center;
-  gap: 11px;
-  min-width: 0;
-  margin: 5px 0;
-  border-radius: 11px;
-  padding: 9px;
-  background: color-mix(in srgb, var(--foreground) 5%, transparent);
-  transition: background 150ms;
+  justify-content: center;
+  gap: 12px;
+  border: 2px dashed var(--primary);
+  border-radius: 18px;
+  background: var(--background);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+  pointer-events: none;
 }
-.message-file:hover {
-  background: color-mix(in srgb, var(--foreground) 9%, transparent);
-}
-.is-mine .message-file {
-  background: #ffffff18;
-}
-.is-mine .message-file:hover {
-  background: #ffffff28;
-}
-.file-icon {
+.agent-list {
   display: grid;
+  gap: 12px;
+}
+.agent-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--card);
+}
+.agent-status {
+  border-radius: 6px;
+  background: var(--muted);
+  padding: 2px 6px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+}
+.agent-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
-  place-items: center;
-  width: 36px;
-  height: 40px;
-  border-radius: 9px;
-  background: #ffffff25;
 }
 .chat-footer {
   background: var(--background);
@@ -428,7 +603,7 @@
 }
 .chat-composer {
   border: 1px solid var(--border);
-  border-radius: 26px;
+  border-radius: 24px;
   background: var(--sidebar);
   box-shadow: 0 2px 8px #00000004;
   transition:
@@ -466,6 +641,25 @@
   }
 }
 @media (max-width: 639px) {
+  .agent-card {
+    gap: 12px;
+    padding: 14px;
+  }
+  .agent-card-actions {
+    gap: 0;
+  }
+  .attachment-download {
+    gap: 9px;
+    padding: 10px;
+  }
+  .file-type-icon {
+    width: 36px;
+    height: 42px;
+  }
+  .file-download-icon {
+    width: 26px;
+    height: 32px;
+  }
   .message-row {
     gap: 7px;
   }

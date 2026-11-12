@@ -58,7 +58,7 @@ export function AccountScreen({
         <p className="mt-3 mb-8 text-base leading-relaxed text-muted-foreground">
           {setup
             ? 'Create your account. Then bring your agents together.'
-            : 'A place for you and your agents.'}
+            : 'A messenger for you and your agents.'}
         </p>
         <form onSubmit={submit} className="space-y-5">
           {creating && (

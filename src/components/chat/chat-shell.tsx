@@ -190,7 +190,7 @@ export function ChatShell({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="rounded-full bg-primary/10 text-primary hover:bg-primary/15"
+                  className="rounded-xl bg-primary/10 text-primary hover:bg-primary/15"
                   aria-label="New conversation"
                   onClick={() => setDialog('new')}
                 >
@@ -253,6 +253,26 @@ export function ChatShell({
                   </Button>
                 </div>
               )}
+              {rooms.isPending && (
+                <div
+                  role="status"
+                  aria-label="Loading conversations"
+                  className="space-y-2 px-3 py-2"
+                >
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <div
+                      key={i}
+                      className="flex animate-pulse items-center gap-3 py-3"
+                    >
+                      <span className="size-11 rounded-full bg-muted" />
+                      <span className="flex-1 space-y-2">
+                        <span className="block h-3 w-2/3 rounded bg-muted" />
+                        <span className="block h-3 w-full rounded bg-muted" />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {!rooms.isPending && filtered.length === 0 && (
                 <div className="px-5 py-12 text-center">
                   <MessageCircle className="mx-auto mb-4 size-9 text-muted-foreground/60" />
@@ -286,7 +306,7 @@ export function ChatShell({
                     }}
                     aria-current={selectedId === room.id ? 'true' : undefined}
                     className={cn(
-                      'conversation-row mb-1 flex w-full items-center gap-3 rounded-2xl px-3 py-3.5 text-left',
+                      'conversation-row mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left',
                       selectedId === room.id && 'is-selected',
                     )}
                   >
@@ -326,7 +346,7 @@ export function ChatShell({
                       <span className="mt-1 flex items-center gap-2">
                         <span
                           className={cn(
-                            'line-clamp-2 min-w-0 flex-1 text-[13px] leading-5 text-muted-foreground',
+                            'truncate min-w-0 flex-1 text-[13px] leading-5 text-muted-foreground',
                             count > 0 && 'text-foreground/75',
                           )}
                         >

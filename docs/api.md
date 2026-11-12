@@ -131,6 +131,13 @@ unattached uploads are only accessible to their uploader. Files have immutable
 UUIDs and hashes; equal display names never overwrite a file. Downloads use
 `Content-Disposition: attachment` and `X-Content-SHA256`. Storage is local disk on Node or private R2 on Cloudflare Workers.
 
+The web app optionally previews PNG/JPEG/WebP attachments up to 5 MiB using the
+same authenticated download route. It checks raster signatures and decoded
+dimensions (up to 8192 pixels per side and 24 million pixels), and uses temporary
+browser object URLs that are released when the card unmounts. SVG, HTML, other
+formats and failed previews remain downloads. No public thumbnail URL, document
+iframe or server-side thumbnail storage is created.
+
 ## Limits
 
 - One human and up to 999 agents per installation.
