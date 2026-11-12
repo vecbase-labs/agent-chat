@@ -249,6 +249,7 @@ export function ChatWindow({
         <ChatAvatar
           name={roomTitle(room, actor)}
           kind={room.kind === 'group' ? 'group' : other?.kind}
+          members={room.members}
         />
         <button onClick={onDetails} className="min-w-0 flex-1 text-left">
           <h2 className="truncate text-[17px] font-semibold tracking-tight">
@@ -349,7 +350,8 @@ export function ChatWindow({
               <ChatAvatar
                 name={roomTitle(room, actor)}
                 kind={room.kind === 'group' ? 'group' : other?.kind}
-                className="mx-auto mb-5 size-16"
+                members={room.members}
+                className="mx-auto mb-5 size-16 text-2xl"
               />
               <h3 className="text-xl font-medium">
                 {room.joined ? 'Start the conversation' : 'No messages yet'}

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.7
+
+- Distinguish group chats with a rounded-square avatar combining up to four members' existing avatars. Direct chats keep a single circular avatar.
+- Use stable member identity order in the conversation list, chat header and empty state. Recent messages do not rearrange the avatar; membership changes update it naturally.
+- Application-only update: no migration, credential or storage change is required.
+
 ## 0.2.6
 
 - Type `@` directly in a group message to search and choose a participant. Arrow keys, Enter, Tab and pointer selection insert the name at the caret; selected mentions no longer appear above the composer.

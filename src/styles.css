@@ -205,6 +205,27 @@
   background: var(--chat-avatar-bg);
   color: var(--chat-avatar-fg);
 }
+.group-avatar-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  gap: 2px;
+  padding: 3px;
+}
+.group-avatar-cell {
+  width: calc(50% - 1px);
+  aspect-ratio: 1;
+  font-size: 0.6em;
+  line-height: 1;
+}
+.group-avatar-grid[data-count='1'] .group-avatar-cell {
+  width: 74%;
+  font-size: 0.85em;
+}
+.group-avatar-grid[data-count='3'] .group-avatar-cell:first-child {
+  margin-inline: 25%;
+}
 .chat-avatar[data-palette='1'] {
   --chat-avatar-bg: #eee5ff;
   --chat-avatar-fg: #7646ad;
