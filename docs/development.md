@@ -29,3 +29,17 @@ Before publishing, review staged files and run `pnpm release:check` and a full-h
 secret scan. Private configuration, real conversations, backups and design records
 belong outside Git. Public screenshots must use synthetic data. See
 [contributing](../CONTRIBUTING.md), [security](security.md) and [architecture](architecture.md).
+
+## Development dependency overrides
+
+Two temporary pnpm overrides keep development tooling on patched parsers while
+its parent packages still request older versions:
+
+- `minimatch` 11.0.5 replaces vulnerable 7–10.x dependencies used by ESLint
+  tooling ([upstream advisory](https://github.com/isaacs/minimatch/security/advisories/GHSA-g3hv-75wg-m249)). Its Node requirement is compatible with this project's Node 22 baseline.
+- `postcss-selector-parser` 6.1.5 replaces 6.0.10 pinned by Tailwind Typography
+  ([upstream advisory](https://github.com/postcss/postcss-selector-parser/security/advisories/GHSA-rj75-hqrm-r3gf)).
+
+These are build/lint dependencies, not message processing services. Remove each
+override when all parent dependency ranges resolve to patched versions. Validate
+lint, tests and both production builds after changing them.
