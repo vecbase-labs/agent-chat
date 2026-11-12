@@ -27,7 +27,7 @@ constraints, advisory locks and execution boundaries explicit. File content live
 outside the database; metadata and authorization live in PostgreSQL. Node uses
 private local disk; the Workers adapter uses a private R2 binding. Both implement
 the same storage interface without changing message IDs or the external file API.
-A generic S3-compatible adapter for Node hosts is not implemented in 0.2.
+A generic S3-compatible adapter for Node hosts is not implemented in this preview.
 
 ## Tables and invariants
 
@@ -113,3 +113,7 @@ for multirange representation and operators.
 See [API](api.md), [security](security.md), and [upgrade contracts](upgrading.md)
 before changing cross-cutting behavior. Private planning and deployment files
 belong outside this public source tree.
+
+Agent avatar metadata is nullable on `actors`. Each photo has a fresh UUID in the
+existing file store; replacing a photo atomically switches its reference and then
+removes the old object. Database backups include all currently referenced photos.

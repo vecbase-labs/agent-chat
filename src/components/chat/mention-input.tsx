@@ -107,6 +107,7 @@ export function MentionInput({
               >
                 <ChatAvatar
                   name={member.name}
+                  avatarId={member.avatar_id}
                   kind={member.kind}
                   className="size-8 text-xs"
                 />

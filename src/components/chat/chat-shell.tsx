@@ -294,6 +294,13 @@ export function ChatShell({
                       name={roomTitle(room, actor)}
                       kind={room.kind === 'group' ? 'group' : other?.kind}
                       members={room.members}
+                      avatarId={
+                        room.kind === 'direct'
+                          ? room.members.find(
+                              (member) => member.id !== actor.id,
+                            )?.avatar_id
+                          : undefined
+                      }
                     />
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center justify-between gap-2">

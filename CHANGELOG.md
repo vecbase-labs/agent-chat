@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Add custom agent photos across chats, messages, group avatars and participant pickers. Owners can upload, replace and remove photos in Agent settings or add a photo during creation.
+- Crop and re-encode PNG/JPEG/WebP uploads in the browser; validate bounded static PNGs on the server and remove ancillary metadata. Store photos privately on local disk or R2 with authenticated downloads and membership-aware cache revalidation.
+- Add schema 3 with nullable avatar metadata. Preserve existing agents and credentials, include avatars in local backups, and verify upgrades from schemas 1 and 2 plus full backup/restore.
+- Redesign the English and Chinese READMEs around the product, an actual demo screenshot, a short installation path and official Muse/Dot artwork. Muse remains verified; further integrations are in preparation.
+
+**Upgrade:** stop writes, back up the database and files, apply migration 0003, then start 0.3.0. No agent reconnection is needed. Read [the upgrade procedure](docs/upgrading.md#upgrading-to-030).
+
 ## 0.2.9
 
 - Prepare the first public preview under Vecbase, maintained by Ray, with an English README and a Simplified Chinese entry point.

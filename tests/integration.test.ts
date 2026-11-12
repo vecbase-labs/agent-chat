@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:http'
 import { SCHEMA_VERSION } from '../src/lib/version'
+import { avatarFixture } from './avatar-fixture'
 import pg from 'pg'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import type { Actor } from '../src/lib/types'
@@ -44,6 +45,7 @@ let cookie = ''
 let admin: Actor
 let agent: Actor, token: string, outsiderToken: string, participantToken: string
 let uploadedFileId: string
+let savedAvatarId: string
 let room: string, otherRoom: string
 const password = 'Test8-ok'
 const server = createServer(async (req, res) => {
@@ -1078,7 +1080,122 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
     ).toBe(1)
   })
 
-  test('backup restores database, attachments and credentials into an empty target', async () => {
+  test('avatars are owner-managed, private, replaceable and revoked with membership', async () => {
+    const portrait = await createAgent('Portrait fixture')
+    const peer = await createAgent('Portrait peer')
+    const portraitRoom = (
+      await request('conversations', {
+        data: {
+          kind: 'group',
+          name: 'Photo fixture',
+          members: [portrait.actor.id, peer.actor.id],
+        },
+      })
+    ).data.id
+    const upload = (
+      bearer?: string,
+      bytes = avatarFixture,
+      mime = 'image/png',
+      extra: Record<string, string> = {},
+    ) =>
+      fetch(origin + `/api/v1/agents/${portrait.actor.id}/avatar`, {
+        method: 'PUT',
+        headers: {
+          Origin: origin,
+          ...(bearer
+            ? { Authorization: `Bearer ${bearer}` }
+            : { Cookie: cookie }),
+          'Content-Type': mime,
+          ...extra,
+        },
+        body: new Uint8Array(bytes),
+      })
+    expect((await upload(portrait.token)).status).toBe(403)
+    expect(
+      (await upload(undefined, avatarFixture, 'image/svg+xml')).status,
+    ).toBe(415)
+    expect((await upload(undefined, Buffer.from('<svg/>'))).status).toBe(400)
+    expect((await upload(undefined, Buffer.alloc(262145))).status).toBe(413)
+    expect(
+      (
+        await upload(undefined, avatarFixture, 'image/png', {
+          Origin: 'https://attacker.invalid',
+        })
+      ).status,
+    ).toBe(403)
+    const first = await upload()
+    expect(first.status).toBe(200)
+    const firstId = (await first.json()).avatar_id
+    const read = (id: string, bearer?: string, etag?: string) =>
+      fetch(origin + `/api/v1/avatars/${id}`, {
+        headers: {
+          ...(bearer
+            ? { Authorization: `Bearer ${bearer}` }
+            : { Cookie: cookie }),
+          ...(etag ? { 'If-None-Match': etag } : {}),
+        },
+      })
+    expect((await fetch(origin + `/api/v1/avatars/${firstId}`)).status).toBe(
+      401,
+    )
+    expect((await read(firstId, outsiderToken)).status).toBe(404)
+    const peerRead = await read(firstId, peer.token)
+    expect(peerRead.status).toBe(200)
+    expect(peerRead.headers.get('content-type')).toBe('image/png')
+    expect(Buffer.from(await peerRead.arrayBuffer())).toEqual(avatarFixture)
+    const etag = peerRead.headers.get('etag')!
+    expect((await read(firstId, peer.token, etag)).status).toBe(304)
+    await request(`conversations/${portraitRoom}/members`, {
+      method: 'PUT',
+      data: { members: [admin.id, portrait.actor.id] },
+    })
+    expect((await read(firstId, peer.token, etag)).status).toBe(404)
+    const secondId = (await (await upload()).json()).avatar_id
+    expect(secondId).not.toBe(firstId)
+    expect((await read(firstId)).status).toBe(404)
+    await expect(
+      readFile(join(process.env.FILES_DIR!, firstId)),
+    ).rejects.toThrow()
+    expect(
+      (
+        await request(`agents/${portrait.actor.id}/avatar`, {
+          method: 'DELETE',
+        })
+      ).status,
+    ).toBe(200)
+    expect((await read(secondId)).status).toBe(404)
+    await expect(
+      readFile(join(process.env.FILES_DIR!, secondId)),
+    ).rejects.toThrow()
+    const concurrent = await Promise.all([upload(), upload()])
+    expect(concurrent.map((r) => r.status)).toEqual([200, 200])
+    savedAvatarId = (await request('me', { bearer: portrait.token })).data.actor
+      .avatar_id
+    const ids = await Promise.all(
+      concurrent.map(async (r) => (await r.json()).avatar_id),
+    )
+    for (const id of ids)
+      expect((await read(id)).status).toBe(id === savedAvatarId ? 200 : 404)
+    const listed = (await request('conversations')).data.conversations.find(
+      (c: Payload) => c.id === portraitRoom,
+    )
+    expect(
+      listed.members.find((a: Payload) => a.id === portrait.actor.id).avatar_id,
+    ).toBe(savedAvatarId)
+    const sent = await request(`conversations/${portraitRoom}/messages`, {
+      bearer: portrait.token,
+      data: { text: 'Avatar fixture', idempotencyKey: randomUUID() },
+    })
+    const page = (
+      await request(`conversations/${portraitRoom}/messages?latest=true`)
+    ).data
+    expect(
+      page.messages.find((m: Payload) => m.id === sent.data.id)
+        .sender_avatar_id,
+    ).toBe(savedAvatarId)
+  })
+
+  test('backup restores database, attachments, avatars and credentials into an empty target', async () => {
     const destination = join(filesDir, 'backup')
     await execute(
       process.execPath,
@@ -1095,7 +1212,10 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
     const manifest = JSON.parse(
       await readFile(join(destination, 'manifest.json'), 'utf8'),
     )
-    expect(manifest.files).toHaveLength(1)
+    expect(manifest.files).toHaveLength(2)
+    expect(
+      manifest.files.some((file: { id: string }) => file.id === savedAvatarId),
+    ).toBe(true)
     const restoredUrl = new URL(databaseUrl)
     const restoreName = `agent_chat_restore_${randomUUID().replaceAll('-', '')}_test`
     restoredUrl.pathname = '/' + restoreName
@@ -1140,11 +1260,18 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
         ).rows[0].token_hash,
       )
       expect(
-        await readFile(
-          join(restoreEnv.FILES_DIR, manifest.files[0].id),
-          'utf8',
-        ),
+        await readFile(join(restoreEnv.FILES_DIR, uploadedFileId), 'utf8'),
       ).toContain('username,language')
+      expect(await readFile(join(restoreEnv.FILES_DIR, savedAvatarId))).toEqual(
+        avatarFixture,
+      )
+      expect(
+        (
+          await restored.query('SELECT id FROM actors WHERE avatar_id=$1', [
+            savedAvatarId,
+          ])
+        ).rowCount,
+      ).toBe(1)
       await execute(
         process.execPath,
         ['--import', 'tsx', 'scripts/doctor.ts'],

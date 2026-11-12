@@ -271,13 +271,16 @@
   border-radius: 16px;
 }
 .message-item.new-sender {
-  margin-top: 22px;
+  margin-top: 18px;
+}
+.message-item:first-child {
+  margin-top: 0;
 }
 .message-day {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 3px 0 24px;
+  margin: 0 0 14px;
 }
 .message-day span {
   border-radius: 999px;

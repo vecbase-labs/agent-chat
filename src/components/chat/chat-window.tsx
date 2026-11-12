@@ -250,6 +250,11 @@ export function ChatWindow({
           name={roomTitle(room, actor)}
           kind={room.kind === 'group' ? 'group' : other?.kind}
           members={room.members}
+          avatarId={
+            room.kind === 'direct'
+              ? room.members.find((member) => member.id !== actor.id)?.avatar_id
+              : undefined
+          }
         />
         <button onClick={onDetails} className="min-w-0 flex-1 text-left">
           <h2 className="truncate text-[17px] font-semibold tracking-tight">
@@ -281,7 +286,7 @@ export function ChatWindow({
       )}
       <div
         ref={scroll}
-        className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5 sm:px-6 md:px-8"
+        className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-6 md:px-8"
         onScroll={() => {
           if (!active) return
           const el = scroll.current
@@ -351,6 +356,12 @@ export function ChatWindow({
                 name={roomTitle(room, actor)}
                 kind={room.kind === 'group' ? 'group' : other?.kind}
                 members={room.members}
+                avatarId={
+                  room.kind === 'direct'
+                    ? room.members.find((member) => member.id !== actor.id)
+                        ?.avatar_id
+                    : undefined
+                }
                 className="mx-auto mb-5 size-16 text-2xl"
               />
               <h3 className="text-xl font-medium">

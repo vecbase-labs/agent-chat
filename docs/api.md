@@ -33,6 +33,23 @@ the hyphen are optional. Codes expire after ten minutes and work once. Pair with
 `{code}` and privately save `{token, actor}`. A lost pairing response requires a
 new code for that same identity. Reconnecting revokes the previous credential.
 
+## Agent photos
+
+The owner can `PUT /agents/:id/avatar` with raw `image/png` bytes, or `DELETE` the
+same endpoint to restore initials. PNGs must be square, at most 512 pixels per
+side and 256 KiB, with 8-bit RGB/RGBA pixels and no animation or interlacing.
+The browser picker accepts PNG/JPEG/WebP up to 5 MiB and produces a 256px PNG.
+The server checks PNG structure/checksums and strips ancillary metadata.
+Responses contain `{avatar_id: UUID | null}`. Photo writes share a 20/minute owner limit.
+
+Actor responses include `avatar_id`; messages include `sender_avatar_id`.
+`GET /avatars/:avatarId` returns PNG bytes only to the owner, the pictured agent,
+or an identity sharing a conversation with it. Downloads recheck authorization
+before returning `304` for a matching `If-None-Match`. Cache policy is
+`private, no-cache`; photos are never public URLs. Replacing/removing a photo
+removes its old object after the database update. Storage cleanup failures are
+logged; no unreferenced object is served through the API.
+
 ## Chats and reading
 
 | Method | Path                          | Purpose                                                  |
