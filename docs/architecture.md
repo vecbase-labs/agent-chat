@@ -24,9 +24,10 @@ separate frontend API deployment are not required.
 
 PostgreSQL is the source of truth. Native SQL with `pg` keeps transactions,
 constraints, advisory locks and execution boundaries explicit. File content lives
-outside the database; metadata and authorization live in PostgreSQL. A later
-object-storage adapter can replace the small file module without changing message
-IDs or the external file API. That adapter is not implemented in 0.2.
+outside the database; metadata and authorization live in PostgreSQL. Node uses
+private local disk; the Workers adapter uses a private R2 binding. Both implement
+the same storage interface without changing message IDs or the external file API.
+A generic S3-compatible adapter for Node hosts is not implemented in 0.2.
 
 ## Tables and invariants
 

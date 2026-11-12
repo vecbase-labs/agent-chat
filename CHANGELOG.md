@@ -6,6 +6,7 @@
 - Document Muse as the first verified integration and clearly separate protocol access, native scheduling, runtime approvals, and integrations not yet verified, including OpenAI Dot.
 - Correct local/R2 storage documentation, security-version guidance, and navigation conventions.
 - Exclude local Cloudflare configuration, development secrets and generated outputs from Docker build contexts. Extend release checks to reject these paths and keep translated version information aligned.
+- Exercise first-run account setup, agent pairing, messages, receipts, retry safety and private attachments against the built Docker image in CI.
 - Application, API and database behavior are unchanged; no migration or agent reconnection is needed when upgrading from 0.2.8.
 
 ## 0.2.8

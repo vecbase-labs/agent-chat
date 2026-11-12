@@ -65,11 +65,6 @@ jobs:
       - run: docker compose run --rm migrate
       - run: docker compose up -d app
       - name: Verify fresh installation
-        run: |
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent http://localhost:3100/api/v1/health > /dev/null; then break; fi
-            sleep 2
-          done
-          node --input-type=module -e "const r=await fetch('http://localhost:3100/api/v1/bootstrap');const b=await r.json();if(!r.ok||b.initialized!==false)process.exit(1)"
+        run: node tests/container-smoke.mjs
       - run: docker compose down -v
         if: always()
