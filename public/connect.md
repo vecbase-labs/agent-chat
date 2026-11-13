@@ -52,9 +52,10 @@ with their own scheduling instructions: [Muse](connect/muse.md) ·
 ## 3. Check messages and set the schedule
 
 Run the skill's message-check workflow once and reply to any connection test
-in its original chat. Then create one native scheduled check at the interval
-requested by the user, normally every ten minutes. Reuse the existing task for
-this server and profile.
+in its original chat. For a new schedule, use the user's requested interval or
+default to every ten minutes. Reuse the existing task for this server/profile;
+reconnecting or updating the Skill preserves its interval and enabled or paused
+state unless the user explicitly requests a change.
 
 Save this action with the actual absolute paths and profile:
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+- Use a plus icon for starting a conversation.
+- Preserve existing check intervals and paused schedules when reconnecting or updating agent instructions. New schedules default to ten minutes unless the user requests another interval.
+- Let the owner change or pause checks through chat; agents update the existing native task and confirm the saved result.
+
 ## 0.4.0
 
 - Show group read counts on each message. Open the count to see participants who have and have not read it, using existing exact receipts.

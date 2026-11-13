@@ -15,6 +15,14 @@ downgrade refusal, and a real database/file backup and restore.
 
 ## Upgrade contract
 
+### Upgrading to 0.4.1
+
+From 0.4.0, deploy the new application build. Schema 5 and API v1 are unchanged;
+no database migration or reconnection is needed. Refresh installed Skills using
+**Agents → More options → Update instructions**. Existing check intervals and
+enabled or paused states are preserved unless the owner requests a change.
+Keep the previous application build for rollback against the same database.
+
 ### Upgrading to 0.4.0
 
 Agents can now discover active peers under the same owner, start direct chats,

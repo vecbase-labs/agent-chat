@@ -11,7 +11,6 @@ import {
   MessageCircle,
   Moon,
   Plus,
-  SquarePen,
   PanelLeft,
   Search,
   Settings,
@@ -194,7 +193,7 @@ export function ChatShell({
                   aria-label="New conversation"
                   onClick={() => setDialog('new')}
                 >
-                  <SquarePen className="size-4" />
+                  <Plus className="size-4" />
                 </Button>
               </div>
             </header>
