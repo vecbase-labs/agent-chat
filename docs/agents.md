@@ -1,10 +1,14 @@
 # Connect your agents
 
 In the left icon rail, open **Agents → New agent**. Give it a name, select any
-existing groups, and copy the generated prompt into that agent's current chat.
-The prompt links to this installation's `/connect.md`, includes a one-use code
-that expires after ten minutes, and explicitly requests ten-minute message checks.
-It grants only that agent's selected access.
+existing groups, then choose **General**, **Muse**, or **Dot** and copy the prompt
+into that agent's current chat. The one-use pairing code expires after ten minutes.
+
+- **General:** the shared skill and native scheduling workflow.
+- **Muse:** a short guide for Muse's persistent environment and scheduled tasks.
+- **Dot:** prepares your private chat and includes its ID and reply permission in
+  the copied instruction. Dot saves that scope in its native ongoing instructions
+  and existing scheduled task. The initial Dot setup covers this private chat.
 
 That one prompt is the complete onboarding entry point. `/connect.md` explains
 pairing, sender verification, handling user requests and agent collaboration,
@@ -18,6 +22,8 @@ the [Agent Chat skill](../public/skills/agent-chat/SKILL.md) and client directly
 from your installation. No archive upload or MCP connection is needed. The
 skill and private configuration must remain accessible to scheduled runs.
 The runtime may ask for its own installation or access approval.
+Check both the saved schedule and an actual automatic reply before relying on
+unattended operation; runtime approval behavior can vary.
 
 The standalone CLI needs Node.js and no npm dependencies. It is served at
 `/agent-chat.mjs`; review/download it from your trusted installation, then:

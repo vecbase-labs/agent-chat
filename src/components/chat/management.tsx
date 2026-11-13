@@ -39,6 +39,12 @@ import {
 import { api, post } from '#/lib/api-client'
 import { authClient } from '#/lib/auth-client'
 import { APP_VERSION } from '#/lib/version'
+import {
+  connectionClients,
+  connectionHints,
+  connectionPrompt,
+} from '#/lib/agent-connection'
+import type { ConnectionClient } from '#/lib/agent-connection'
 import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH } from '#/lib/password-policy'
 import { ChatAvatar } from './avatar'
 import { AvatarPicker } from './avatar-picker'
@@ -79,6 +85,9 @@ export function ManagementPage({
   const [selected, setSelected] = useState<Actor | null>(null)
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
   const [enrollmentName, setEnrollmentName] = useState('')
+  const [connectionClient, setConnectionClient] =
+    useState<ConnectionClient>('General')
+  const [privateChatId, setPrivateChatId] = useState<string | null>(null)
   const [roomIds, setRoomIds] = useState<string[]>([])
   const [pending, setPending] = useState(false)
   const [confirm, setConfirm] = useState<{
@@ -151,6 +160,8 @@ export function ManagementPage({
           )
         }
         setEnrollmentName(name)
+        setConnectionClient('General')
+        setPrivateChatId(null)
         setEnrollment(data)
         setCreating(false)
       }
@@ -177,8 +188,24 @@ export function ManagementPage({
       toast.error('Copy is unavailable. Select and copy the text manually.')
     }
   }
+  async function selectConnectionClient(client: ConnectionClient) {
+    setConnectionClient(client)
+    if (client !== 'Dot' || privateChatId || !enrollment) return
+    await perform(async () => {
+      const room = await post<{ id: string }>('conversations', {
+        kind: 'direct',
+        members: [enrollment.agentId],
+      })
+      setPrivateChatId(room.id)
+    })
+  }
   const prompt = enrollment
-    ? `Install the Agent Chat skill from ${enrollment.server}/connect.md, pair as "${enrollmentName}" with code ${enrollment.code}, and run it every 10 minutes to read and reply to my messages.`
+    ? connectionPrompt(
+        connectionClient,
+        enrollment,
+        enrollmentName,
+        privateChatId,
+      )
     : ''
   const title = enrollment
     ? `Connect ${enrollmentName}`
@@ -236,20 +263,57 @@ export function ManagementPage({
           )}
           {enrollment ? (
             <div className="max-w-2xl space-y-5">
+              <div className="space-y-3">
+                <div
+                  role="group"
+                  aria-label="Agent platform"
+                  className="inline-flex w-full gap-1 rounded-xl bg-muted p-1 sm:w-auto"
+                >
+                  {connectionClients.map((client) => (
+                    <Button
+                      key={client}
+                      variant={
+                        connectionClient === client ? 'outline' : 'ghost'
+                      }
+                      className="min-w-0 flex-1 rounded-lg sm:min-w-24"
+                      aria-pressed={connectionClient === client}
+                      disabled={pending}
+                      onClick={() => void selectConnectionClient(client)}
+                    >
+                      {client}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {connectionHints[connectionClient]}
+                </p>
+              </div>
               <Textarea
                 aria-label="Connection prompt"
                 readOnly
                 value={prompt}
+                placeholder="Preparing your private chat…"
                 className="min-h-32 text-base leading-relaxed"
               />
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm text-muted-foreground">
                   Expires in 10 minutes · One use
                 </span>
-                <Button onClick={() => copy(prompt)}>
+                <Button
+                  disabled={!prompt || pending}
+                  onClick={() => copy(prompt)}
+                >
                   <Copy /> Copy prompt
                 </Button>
               </div>
+              {connectionClient === 'Dot' && !privateChatId && !pending && (
+                <Button
+                  variant="outline"
+                  onClick={() => void selectConnectionClient('Dot')}
+                >
+                  Prepare private chat
+                </Button>
+              )}
               <p className="text-sm text-muted-foreground">
                 The agent needs access to this server. A localhost address is
                 reachable only from this computer.
@@ -471,6 +535,8 @@ export function ManagementPage({
                                       `agents/${a.id}/enrollment`,
                                     )
                                     setEnrollmentName(a.name)
+                                    setConnectionClient('General')
+                                    setPrivateChatId(null)
                                     setEnrollment(data)
                                   },
                                 })
