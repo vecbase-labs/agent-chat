@@ -1,14 +1,10 @@
-import { Check, CheckCheck, Copy, Reply } from 'lucide-react'
+import { Copy, Reply } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '#/components/ui/tooltip'
 import { cn } from '#/lib/utils'
 import { ChatAvatar } from './avatar'
 import { FileCard } from './file-card'
+import { MessageReceipts } from './message-receipts'
 import type { Conversation, Message } from '#/lib/types'
 
 export function dayLabel(value: string, now = new Date()) {
@@ -37,6 +33,7 @@ export function MessageBubble({
   mine,
   grouped,
   readers,
+  participants,
   room,
   onReply,
 }: {
@@ -44,6 +41,7 @@ export function MessageBubble({
   mine: boolean
   grouped: boolean
   readers: { id: string; name: string }[]
+  participants: { id: string; name: string }[]
   room: Conversation
   onReply: (message: Message) => void
 }) {
@@ -65,9 +63,6 @@ export function MessageBubble({
   const additionalMentions = mentionedNames.filter(
     (name) => !inlineSet.has(name),
   )
-  const receiptLabel = readers.length
-    ? `Read by ${readers.map((reader) => reader.name).join(', ')}`
-    : 'Sent · saved on server'
   return (
     <div
       data-message-id={message.id}
@@ -192,26 +187,13 @@ export function MessageBubble({
                 minute: '2-digit',
               })}
             </time>
-            {mine && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span
-                    tabIndex={0}
-                    className="message-receipt"
-                    aria-label={receiptLabel}
-                  >
-                    {readers.length ? (
-                      <CheckCheck className="size-3.5" />
-                    ) : (
-                      <Check className="size-3.5" />
-                    )}
-                    <span>{readers.length ? 'Read' : 'Sent'}</span>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent sideOffset={8} className="max-w-64 text-sm">
-                  {receiptLabel}
-                </TooltipContent>
-              </Tooltip>
+            {(mine || room.kind === 'group') && (
+              <MessageReceipts
+                message={message}
+                readers={readers}
+                participants={participants}
+                room={room}
+              />
             )}
           </div>
         </div>

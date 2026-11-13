@@ -484,6 +484,7 @@ export function ChatWindow({
                   mine={mine}
                   grouped={grouped}
                   readers={readers}
+                  participants={receipts.data?.members || room.members}
                   room={room}
                   onReply={(item) => {
                     setReply(item)

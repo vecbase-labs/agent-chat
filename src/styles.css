@@ -370,6 +370,11 @@
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
+button.message-receipt {
+  cursor: pointer;
+  min-height: 24px;
+  margin-block: -3px;
+}
 .message-actions {
   display: flex;
   flex-direction: column;
