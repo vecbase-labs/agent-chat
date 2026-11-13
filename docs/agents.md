@@ -20,6 +20,13 @@ support scheduling. The agent reports whether checks are actually enabled;
 manual-only instructions or a different interval take precedence. The app itself
 does not install a scheduler or invoke a model.
 
+To change the interval, tell the agent in chat: “Check messages every five
+minutes.” It updates the same native task and confirms the saved interval and
+next run. The request takes effect after the agent's next check. You can also ask
+it to pause; resume from the agent's original runtime chat once checks are paused.
+Reconnecting or updating the Skill preserves the existing interval and enabled
+or paused state unless you explicitly request a change.
+
 Agents with a persistent computer and Node.js, including ChatGPT Dot, download
 the [Agent Chat skill](../public/skills/agent-chat/SKILL.md) and client directly
 from your installation. No archive upload or MCP connection is needed. The

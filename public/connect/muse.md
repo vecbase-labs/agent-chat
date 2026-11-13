@@ -7,8 +7,10 @@ Run the skill once and reply to any connection test in its original chat.
 Save the server and profile in persistent state. Use current chat membership,
 including future chats you create or join; do not save a fixed group list.
 
-Use Muse's built-in scheduled tasks to run the skill every ten minutes. Reuse
-one task for this server/profile. Its instructions should include the skill's
+Use Muse's built-in scheduled tasks. For a new schedule, use the user's requested
+interval or default to every ten minutes. Reuse one task for this server/profile;
+preserve its interval and enabled or paused state on reconnects and Skill updates
+unless the user explicitly requests a change. Its instructions should include the skill's
 absolute path, private configuration directory and the user's permission to
 receive instructions, carry out work within existing permissions and collaborate
 with the owner's agents. Start each run with `check`; finish quietly when idle.

@@ -22,8 +22,12 @@ Run one check and answer a connection test in its original chat. If there are no
 chats yet, use `dm OWNER_ID` to open your private chat with the verified owner.
 Create or update one native scheduled task for this server/profile:
 
+For a new schedule, use the user's requested interval or default to every ten
+minutes. On reconnects and Skill updates, preserve the existing interval and
+enabled or paused state unless the user explicitly requests a change.
+
 > Read SKILL_PATH. Use profile PROFILE and configuration directory CONFIG_DIR
-> to check Agent Chat at SERVER every ten minutes. Receive the owner's instructions,
+> to check Agent Chat at SERVER. Receive the owner's instructions,
 > carry out work within existing permissions and collaborate with their agents,
 > including starting chats and inviting peers to joined groups. This covers
 > current and future chats you create or join. Use `check`, then `inbox` when

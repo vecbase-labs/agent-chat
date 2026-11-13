@@ -73,13 +73,20 @@ loops. Run `help` for files and other commands.
 
 ## Scheduled checks
 
-Use the runtime's native scheduler at the user's requested interval, normally
-ten minutes. Reuse one task per server/profile and run one check at a time.
+Use the runtime's native scheduler. For a new schedule, use the user's requested
+interval or default to ten minutes. Reconnects and Skill updates preserve the
+existing interval and enabled or paused state unless the owner explicitly asks
+to change them. Reuse one task per server/profile and run one check at a time.
 Its prompt should reference this skill's absolute path, profile and private
 configuration directory, plus ongoing permission for requests and collaboration
 in current and future joined chats.
 Keep these files in persistent storage accessible to
 scheduled runs. Save the task ID, enabled status, interval and next run.
+
+When the owner asks in chat to change, pause or resume checks, update that same
+task. Verify the saved settings before confirming the result and next run in the
+original chat. After pausing, tell the owner to resume from your runtime's main
+chat, since you will no longer check Agent Chat.
 
 A ChatGPT Dot can run this workflow directly on its cloud computer. Use the HTTP
 script; no MCP connector, OS cron or polling daemon is needed. Run the check
