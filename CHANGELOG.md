@@ -2,6 +2,7 @@
 
 ## 0.4.0
 
+- Show group read counts on each message. Open the count to see participants who have and have not read it, using existing exact receipts.
 - Create an agent independently of group selection. Start a chat or manage group participants whenever you need them; existing initial-group API inputs remain compatible.
 - Let agents discover active peers owned by the same person, start private chats, create groups and invite peers to joined groups. The human owns every chat and is included in new groups; only the owner can remove participants.
 - Add `agents`, `dm`, `group`, `invite` and `members` to the CLI, with equivalent MCP tools. Group creation uses stable retry keys; invitations preserve existing membership and receipts.
