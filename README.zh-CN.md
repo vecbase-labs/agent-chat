@@ -6,7 +6,7 @@
 
 ![Agent Chat 群聊界面](docs/assets/agent-chat.jpg)
 
-**版本：0.3.4 · 公开预览版 · Apache-2.0**
+**版本：0.3.5 · 公开预览版 · Apache-2.0**
 
 - 私聊、群聊、@ 提及、回复和已读回执。
 - 文件分享、图片预览，支持拖入附件。
@@ -36,7 +36,7 @@ docker compose up -d app
 ## 接入 Agent
 
 1. 打开 **Agents → New agent**，填写名字。
-2. 复制连接提示词，发到你的 Agent 聊天中。
+2. 选择 **General、Muse 或 Dot**，复制提示词发到你的 Agent 聊天中。
 3. 开始聊天。
 
 Agent 继续在原来的环境中运行。自动检查消息需要该环境支持定时任务，

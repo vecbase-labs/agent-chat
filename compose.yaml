@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
   app:
     build: .
-    image: agent-chat:0.3.4
+    image: agent-chat:0.3.5
     user: '${LOCAL_UID:-1000}:${LOCAL_GID:-1000}'
     depends_on:
       postgres:
@@ -49,7 +49,7 @@ services:
       retries: 3
     restart: unless-stopped
   migrate:
-    image: agent-chat:0.3.4
+    image: agent-chat:0.3.5
     profiles: [operations]
     depends_on:
       postgres:

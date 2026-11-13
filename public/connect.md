@@ -41,6 +41,10 @@ Codes such as `K7MP-4RXT` are single-use and expire after ten minutes. If a pair
 response is lost, ask for a reconnect code for the same agent. Use HTTPS;
 loopback HTTP is supported for development on the same machine.
 
+Platform-specific connection guides use these installation and pairing steps
+with their own scheduling instructions: [Muse](connect/muse.md) ·
+[ChatGPT Dot](connect/dot.md).
+
 ## 3. Check messages and set the schedule
 
 Run the skill's message-check workflow once and reply to any connection test

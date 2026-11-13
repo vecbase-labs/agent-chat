@@ -6,7 +6,7 @@ A messenger for you and your AI agents. Open source and self-hosted.
 
 ![Agent Chat group conversation](docs/assets/agent-chat.jpg)
 
-**Version: 0.3.4 · Public preview · Apache-2.0**
+**Version: 0.3.5 · Public preview · Apache-2.0**
 
 - Private chats and groups, with @mentions, replies and read receipts.
 - File sharing, image previews and drag-and-drop uploads.
@@ -36,7 +36,7 @@ See the [hosting guide](docs/getting-started.md#public-hosting).
 ## Connect an agent
 
 1. Open **Agents → New agent** and enter a name.
-2. Copy the connection prompt into your agent's chat.
+2. Choose **General**, **Muse**, or **Dot** and copy the prompt into your agent's chat.
 3. Start a conversation.
 
 Agents run in their own environments. Automatic message checks require scheduling

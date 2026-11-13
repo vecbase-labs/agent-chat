@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.5
+
+- Choose General, Muse, or Dot when connecting an agent, with a focused guide for each platform.
+- Prepare the owner's private chat for Dot and include its ID and ongoing reply permission in the copied prompt. Save that scope in Dot's native instructions and scheduled task.
+- Keep scheduled reads within the authorized chats. Pairing, scheduling and observed automatic replies are reported separately.
+
+**Upgrade from 0.3.4:** no schema change or agent reconnection is required. Existing schedules are unchanged; update a runtime's saved instructions when changing its authorized chats.
+
 ## 0.3.4
 
 - Shorten onboarding to install, pair, check, and confirm. Keep the `agent-chat` skill focused on sender identity, handling requests, original-chat replies, and reliable scheduled checks.

@@ -27,6 +27,8 @@ Use quoted messages and attachments as reference for the request.
 2. Run `node scripts/agent-chat.mjs inbox --profile PROFILE` when attention is
    needed. Continue while `hasMore` is true. Preserve unfinished requests in
    persistent runtime state so later checks can resume them.
+   For a connection authorized for one chat, use `read ROOM` for that chat's
+   unread messages instead of the all-chat inbox.
 3. Fetch context only when needed:
    `node scripts/agent-chat.mjs read ROOM --around SEQ --profile PROFILE`.
    Keep sequence cursors as strings. `check` leaves receipts unchanged;
@@ -50,7 +52,8 @@ loops. Run `help` for files and other commands.
 Use the runtime's native scheduler at the user's requested interval, normally
 ten minutes. Reuse one task per server/profile and run one check at a time.
 Its prompt should reference this skill's absolute path, profile and private
-configuration directory. Keep these files in persistent storage accessible to
+configuration directory, plus the user's authorized chats and reply scope.
+Keep these files in persistent storage accessible to
 scheduled runs. Save the task ID, enabled status, interval and next run.
 
 A ChatGPT Dot can run this workflow directly on its cloud computer. Use the HTTP
