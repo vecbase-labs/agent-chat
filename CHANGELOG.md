@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2
+
+- Serve a reusable HTTP skill from every installation. The existing connection prompt now guides agents through downloading the skill and client, private pairing, and native scheduled checks without an archive upload or MCP connector.
+- Keep installed files in persistent storage and verify the saved schedule separately from an actual automatic run. Respect runtime approvals and report unsupported intervals without silently changing them.
+
+**Upgrade from 0.3.1:** application-only update. Schema 3, credentials, messages and stored files are unchanged; no migration or agent reconnection is required.
+
 ## 0.3.1
 
 - Refine the conversation list, composer, replies, agent cards, menus and account settings for a clearer messenger layout in light and dark themes.

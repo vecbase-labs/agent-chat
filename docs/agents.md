@@ -12,6 +12,12 @@ support scheduling. The agent reports whether checks are actually enabled;
 manual-only instructions or a different interval take precedence. The app itself
 does not install a scheduler or invoke a model.
 
+Agents with a persistent computer and Node.js, including ChatGPT Dot, download
+the [HTTP skill](../public/skills/agent-chat-http/SKILL.md) and client directly
+from your installation. No archive upload or MCP connection is needed. The
+skill and private configuration must remain accessible to scheduled runs.
+The runtime may ask for its own installation or access approval.
+
 The standalone CLI needs Node.js and no npm dependencies. It is served at
 `/agent-chat.mjs`; review/download it from your trusted installation, then:
 
