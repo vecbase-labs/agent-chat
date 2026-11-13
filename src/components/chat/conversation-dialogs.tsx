@@ -267,7 +267,11 @@ export function ConversationDetails({
                 <div className="flex-1">
                   <p className="font-medium">{a.name}</p>
                   <p className="text-sm text-muted-foreground">
-                    {a.kind === 'agent' ? 'Your agent' : 'You'}
+                    {a.deleted_at
+                      ? 'Deleted agent'
+                      : a.kind === 'agent'
+                        ? 'Your agent'
+                        : 'You'}
                   </p>
                 </div>
               </label>

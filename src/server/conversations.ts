@@ -74,10 +74,27 @@ async function lockWriter(
     fail(403, 'NOT_A_MEMBER', 'Join this conversation before sending.')
 }
 
+/** Call while holding the conversation lock, shared with agent deletion. */
+export async function requireOpenConversation(client: PoolClient, id: string) {
+  const closed = await client.query(
+    `SELECT 1 FROM conversations c WHERE c.id=$1 AND c.kind='direct' AND EXISTS (
+      SELECT 1 FROM conversation_members cm JOIN actors a ON a.id=cm.actor_id
+      WHERE cm.conversation_id=c.id AND a.deleted_at IS NOT NULL)`,
+    [id],
+  )
+  if (closed.rowCount)
+    fail(
+      410,
+      'CONVERSATION_CLOSED',
+      'This agent was deleted. Chat history is still available.',
+    )
+}
+
 export async function listConversations(
   actor: Actor,
   search = '',
   cursor?: string,
+  archive: 'all' | 'active' | 'archived' = 'all',
 ) {
   let boundary: [string, string] | undefined
   if (cursor) {
@@ -93,7 +110,7 @@ export async function listConversations(
   // returns a bounded list; incremental message history uses separate cursors.
   const rows = await query<Conversation & { page_time: string }>(
     `SELECT c.*,to_char(c.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS page_time, cm.last_read_seq, (cm.actor_id IS NOT NULL) AS joined,
-    COALESCE((SELECT jsonb_agg(jsonb_build_object('id',a.id,'name',a.name,'kind',a.kind,'owner_id',a.owner_id,'description',a.description,'disabled_at',a.disabled_at,'avatar_id',a.avatar_id) ORDER BY a.name)
+    COALESCE((SELECT jsonb_agg(jsonb_build_object('id',a.id,'name',a.name,'kind',a.kind,'owner_id',a.owner_id,'description',a.description,'disabled_at',a.disabled_at,'deleted_at',a.deleted_at,'avatar_id',a.avatar_id) ORDER BY a.name)
       FROM conversation_members m JOIN actors a ON a.id=m.actor_id WHERE m.conversation_id=c.id),'[]') AS members,
     (SELECT left(text,160) FROM messages WHERE conversation_id=c.id ORDER BY seq DESC LIMIT 1) AS preview,
     (SELECT count(*)::int FROM messages msg WHERE msg.conversation_id=c.id AND cm.actor_id IS NOT NULL AND msg.seq>GREATEST(cm.last_read_seq,CASE WHEN $2::boolean THEN cm.dismissed_through_seq ELSE 0 END) AND NOT(cm.read_ranges @> msg.seq::numeric) AND msg.sender_id<>$1
@@ -104,6 +121,7 @@ export async function listConversations(
     WHERE (cm.actor_id IS NOT NULL OR ($2::boolean AND c.owner_id=$1))
       AND ($3='' OR c.name ILIKE '%' || $3 || '%' OR EXISTS (SELECT 1 FROM conversation_members search_member JOIN actors search_actor ON search_actor.id=search_member.actor_id WHERE search_member.conversation_id=c.id AND search_actor.name ILIKE '%' || $3 || '%'))
       AND ($4::timestamptz IS NULL OR (c.updated_at,c.id)<($4::timestamptz,$5::uuid))
+      AND (NOT $2::boolean OR $6='all' OR (c.archived_at IS NOT NULL)=($6='archived'))
     ORDER BY c.updated_at DESC,c.id DESC LIMIT 201`,
     [
       actor.id,
@@ -111,14 +129,25 @@ export async function listConversations(
       search.slice(0, 100),
       boundary?.[0] || null,
       boundary?.[1] || null,
+      archive,
     ],
   )
   const page = rows.slice(0, 200),
     last = page.at(-1)
   return {
-    conversations: page.map(
-      ({ page_time: _time, ...conversation }) => conversation,
-    ),
+    conversations: page.map(({ page_time: _time, ...conversation }) => ({
+      ...conversation,
+      archived_at: actor.kind === 'human' ? conversation.archived_at : null,
+    })),
+    archivedCount:
+      actor.kind === 'human'
+        ? (
+            await query<{ count: number }>(
+              'SELECT count(*)::int AS count FROM conversations WHERE owner_id=$1 AND archived_at IS NOT NULL',
+              [actor.id],
+            )
+          )[0].count
+        : 0,
     truncated: rows.length > 200,
     nextCursor:
       rows.length > 200 && last
@@ -127,6 +156,21 @@ export async function listConversations(
           )
         : null,
   }
+}
+
+export async function archiveConversation(
+  actor: Actor,
+  id: string,
+  archived: boolean,
+) {
+  requireOwner(actor)
+  // UPDATE takes the same room lock as sends; a new message restores the chat.
+  const rows = await query(
+    'UPDATE conversations SET archived_at=CASE WHEN $3::boolean THEN COALESCE(archived_at,now()) ELSE NULL END WHERE id=$1 AND owner_id=$2 RETURNING archived_at',
+    [id, actor.id, archived],
+  )
+  if (!rows[0]) fail(404, 'NOT_FOUND', 'Conversation not found.')
+  return { archived: rows[0].archived_at !== null }
 }
 
 export async function inbox(actor: Actor) {
@@ -283,6 +327,7 @@ export async function sendMessage(
         duplicate: true,
       }
     }
+    await requireOpenConversation(client, conversationId)
     if (mentions.length) {
       const count = await client.query(
         'SELECT actor_id FROM conversation_members WHERE conversation_id=$1 AND actor_id=ANY($2::uuid[])',
@@ -321,7 +366,7 @@ export async function sendMessage(
     const {
       rows: [room],
     } = await client.query<{ last_seq: string }>(
-      'UPDATE conversations SET last_seq=last_seq+1,updated_at=now() WHERE id=$1 RETURNING last_seq',
+      'UPDATE conversations SET last_seq=last_seq+1,updated_at=now(),archived_at=NULL WHERE id=$1 RETURNING last_seq',
       [conversationId],
     )
     await client.query(
@@ -436,7 +481,14 @@ export async function createConversation(
         'SELECT id FROM conversations WHERE direct_key=$1',
         [key],
       )
-      if (existing.rows[0]) return existing.rows[0]
+      if (existing.rows[0]) {
+        if (actor.kind === 'human')
+          await client.query(
+            'UPDATE conversations SET archived_at=NULL WHERE id=$1',
+            [existing.rows[0].id],
+          )
+        return existing.rows[0]
+      }
     }
     if (
       (

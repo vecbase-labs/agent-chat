@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+- Delete active, disabled or unpaired agents from the Agents menu with a named confirmation. Deletion revokes credentials and pairing codes, removes group memberships and keeps historical messages, files and authorship. Former direct chats stay readable.
+- Archive chats from their list menu or conversation header. Restore them from Archived; new messages bring them back automatically. Archiving does not change Agent inboxes or read receipts.
+
+**Upgrade:** pause writes, back up the database and files, apply schema 6, then deploy. Existing data and credentials are preserved; no agent is deleted during migration. See [upgrade instructions](docs/upgrading.md#upgrading-to-050).
+
 ## 0.4.2
 
 - Choose a check interval when connecting a new agent: 5, 10, 30 or 60 minutes, or a custom interval. The copied General, Muse or Dot prompt includes the choice.

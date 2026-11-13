@@ -23,5 +23,10 @@
     "version": 5,
     "name": "0005_conversation_creation.sql",
     "checksum": "1228f995bfee0bbfb2c78ff5eb562dc3c26649d2a5291e8d37eb6753e2199527"
+  },
+  {
+    "version": 6,
+    "name": "0006_deleted_agents.sql",
+    "checksum": "bc3337c266bb3e14936b189c7f2093ddc7fbdcd332cdf10c140d37ed0befdac3"
   }
 ]

@@ -113,7 +113,7 @@ export async function updateAvatar(
   try {
     previous = await transaction(async (client) => {
       const { rows } = await client.query<{ avatar_id: string | null }>(
-        "SELECT avatar_id FROM actors WHERE id=$1 AND owner_id=$2 AND kind='agent' FOR UPDATE",
+        "SELECT avatar_id FROM actors WHERE id=$1 AND owner_id=$2 AND kind='agent' AND deleted_at IS NULL FOR UPDATE",
         [agentId, owner.id],
       )
       if (!rows[0]) fail(404, 'NOT_FOUND', 'Agent not found.')
@@ -141,7 +141,9 @@ export async function readAvatar(viewer: Actor, id: string, request: Request) {
     `SELECT a.avatar_sha256 FROM actors a WHERE a.avatar_id=$1 AND
       (a.id=$2 OR a.owner_id=$2 OR EXISTS (
         SELECT 1 FROM conversation_members mine JOIN conversation_members peer USING(conversation_id)
-        WHERE mine.actor_id=$2 AND peer.actor_id=a.id))`,
+        WHERE mine.actor_id=$2 AND peer.actor_id=a.id)
+       OR EXISTS (SELECT 1 FROM messages m JOIN conversation_members mine ON mine.conversation_id=m.conversation_id
+         WHERE mine.actor_id=$2 AND m.sender_id=a.id))`,
     [id, viewer.id],
   )
   if (!avatar) fail(404, 'NOT_FOUND', 'Photo not found.')

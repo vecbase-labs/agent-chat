@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
@@ -1698,6 +1698,439 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
     ).toBe('9007199254740993')
   })
 
+  test('deleting an agent revokes access and pairing, preserves history and closes direct chats', async () => {
+    const retired = await createAgent('Retiring agent')
+    const peer = await createAgent('Retirement peer')
+    const directPeer = await createAgent('Retirement direct peer')
+    const group = (
+      await request('conversations', {
+        data: {
+          kind: 'group',
+          name: 'Preserved group',
+          members: [retired.actor.id, peer.actor.id],
+        },
+      })
+    ).data.id
+    const direct = (
+      await request('conversations', {
+        data: { kind: 'direct', members: [retired.actor.id] },
+      })
+    ).data.id
+    const agentDirect = (
+      await request('conversations', {
+        data: {
+          kind: 'direct',
+          members: [retired.actor.id, directPeer.actor.id],
+        },
+      })
+    ).data.id
+    const photoResponse = await fetch(
+      `${origin}/api/v1/agents/${retired.actor.id}/avatar`,
+      {
+        method: 'PUT',
+        headers: {
+          Origin: origin,
+          Cookie: cookie,
+          'Content-Type': 'image/png',
+        },
+        body: new Uint8Array(avatarFixture),
+      },
+    )
+    expect(photoResponse.status).toBe(200)
+    const photo = (await photoResponse.json()).avatar_id
+    const uploaded = await fetch(
+      `${origin}/api/v1/conversations/${group}/files`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${retired.token}`,
+          'X-File-Name': 'history.txt',
+        },
+        body: 'Keep this attachment.',
+      },
+    )
+    expect(uploaded.status).toBe(201)
+    const file = (await uploaded.json()).id
+    const send = (chat: string, bearer?: string) =>
+      request(`conversations/${chat}/messages`, {
+        bearer,
+        data: {
+          text: 'Historical message',
+          idempotencyKey: randomUUID(),
+          ...(chat === group ? { fileIds: [file] } : {}),
+        },
+      })
+    const groupMessage = await send(group, retired.token)
+    expect(groupMessage.status).toBe(201)
+    const directMessage = await send(direct, retired.token)
+    await request(`conversations/${group}/read`, {
+      bearer: peer.token,
+      data: { messageIds: [groupMessage.data.id] },
+    })
+    const ownerMessage = { text: 'Owner history', idempotencyKey: randomUUID() }
+    const ownerSent = await request(`conversations/${direct}/messages`, {
+      data: ownerMessage,
+    })
+    expect(ownerSent.status).toBe(201)
+    const remainingReceipts =
+      'SELECT * FROM conversation_members WHERE actor_id<>$1 ORDER BY conversation_id,actor_id'
+    const receiptsBefore = (
+      await adminDb.query(remainingReceipts, [retired.actor.id])
+    ).rows
+    const messagesBefore = (
+      await adminDb.query('SELECT * FROM messages ORDER BY id')
+    ).rows
+    const pendingCode = 'DELE-TEST'
+    await adminDb.query(
+      "INSERT INTO enrollments(id,actor_id,code_hash,expires_at) VALUES($1,$2,$3,now()+interval '10 minutes')",
+      [
+        randomUUID(),
+        retired.actor.id,
+        createHash('sha256').update(pendingCode).digest('hex'),
+      ],
+    )
+    const remove = (id = retired.actor.id, bearer?: string) =>
+      request(`agents/${id}`, { method: 'DELETE', bearer })
+    expect((await remove(retired.actor.id, peer.token)).status).toBe(403)
+    expect(
+      (
+        await request(`agents/${retired.actor.id}`, {
+          method: 'DELETE',
+          anonymous: true,
+        })
+      ).status,
+    ).toBe(401)
+    expect((await remove(admin.id)).status).toBe(404)
+    expect((await remove(randomUUID())).status).toBe(404)
+    expect((await remove()).data).toEqual({ deleted: true })
+    expect((await remove()).data).toEqual({ deleted: true })
+    const retry = await request(`conversations/${direct}/messages`, {
+      data: ownerMessage,
+    })
+    expect(retry.data).toEqual({ ...ownerSent.data, duplicate: true })
+    const row = (
+      await adminDb.query('SELECT * FROM actors WHERE id=$1', [
+        retired.actor.id,
+      ])
+    ).rows[0]
+    expect(row.deleted_at).toBeInstanceOf(Date)
+    expect(row.disabled_at).toBeInstanceOf(Date)
+    expect(row.token_hash).toBeNull()
+    expect(row.name).toBe('Retiring agent')
+    expect(row.avatar_id).toBe(photo)
+    expect(
+      (
+        await adminDb.query(
+          'SELECT 1 FROM enrollments WHERE actor_id=$1 AND consumed_at IS NULL',
+          [retired.actor.id],
+        )
+      ).rowCount,
+    ).toBe(0)
+    expect((await request('me', { bearer: retired.token })).status).toBe(401)
+    expect(
+      (await request('pair', { anonymous: true, data: { code: pendingCode } }))
+        .status,
+    ).toBe(400)
+    for (const data of [{ disabled: false }, { name: 'Resurrected' }])
+      expect(
+        (await request(`agents/${retired.actor.id}`, { method: 'PATCH', data }))
+          .status,
+      ).toBe(404)
+    expect(
+      (await request(`agents/${retired.actor.id}/enrollment`, { data: {} }))
+        .status,
+    ).toBe(404)
+    expect(
+      (await request(`agents/${retired.actor.id}/avatar`, { method: 'DELETE' }))
+        .status,
+    ).toBe(404)
+    for (const bearer of [undefined, peer.token])
+      expect(
+        (await request('actors', { bearer })).data.actors.some(
+          (a: Actor) => a.id === retired.actor.id,
+        ),
+      ).toBe(false)
+    expect(
+      (await request(`conversations/${group}/members`)).data.members.some(
+        (a: Actor) => a.id === retired.actor.id,
+      ),
+    ).toBe(false)
+    expect(
+      (await adminDb.query(remainingReceipts, [retired.actor.id])).rows,
+    ).toEqual(receiptsBefore)
+    expect(
+      (await adminDb.query('SELECT * FROM messages ORDER BY id')).rows,
+    ).toEqual(messagesBefore)
+    const listed = (await request('conversations')).data.conversations.find(
+      (c: Payload) => c.id === direct,
+    )
+    expect(
+      listed.members.find((a: Actor) => a.id === retired.actor.id).deleted_at,
+    ).toBeTruthy()
+    expect(
+      (await request(`conversations/${direct}/messages`)).data.messages[0]
+        .sender_name,
+    ).toBe('Retiring agent')
+    expect(
+      (
+        await request(`conversations/${direct}/read`, {
+          data: { messageIds: [directMessage.data.id] },
+        })
+      ).status,
+    ).toBe(200)
+    for (const [chat, bearer] of [
+      [direct, undefined],
+      [agentDirect, directPeer.token],
+    ] as const)
+      expect((await send(chat, bearer)).data.error.code).toBe(
+        'CONVERSATION_CLOSED',
+      )
+    const closedUpload = await fetch(
+      `${origin}/api/v1/conversations/${direct}/files`,
+      {
+        method: 'POST',
+        headers: { Origin: origin, Cookie: cookie },
+        body: 'Blocked upload',
+      },
+    )
+    expect(closedUpload.status).toBe(410)
+    for (const bearer of [undefined, peer.token, outsiderToken]) {
+      const headers: Record<string, string> = bearer
+        ? { Authorization: `Bearer ${bearer}` }
+        : { Cookie: cookie }
+      const attachment = await fetch(`${origin}/api/v1/files/${file}`, {
+        headers,
+      })
+      const avatar = await fetch(`${origin}/api/v1/avatars/${photo}`, {
+        headers,
+      })
+      expect(attachment.status).toBe(bearer === outsiderToken ? 404 : 200)
+      expect(avatar.status).toBe(bearer === outsiderToken ? 404 : 200)
+      if (attachment.ok)
+        expect(await attachment.text()).toBe('Keep this attachment.')
+    }
+    expect(
+      (
+        await request(`conversations/${group}/members`, {
+          bearer: peer.token,
+          data: { members: [retired.actor.id] },
+        })
+      ).status,
+    ).toBe(400)
+    expect(
+      (
+        await request(`conversations/${group}/members`, {
+          method: 'PUT',
+          data: { members: [admin.id, retired.actor.id] },
+        })
+      ).status,
+    ).toBe(400)
+    expect(
+      (
+        await request('conversations', {
+          data: { kind: 'direct', members: [retired.actor.id] },
+        })
+      ).status,
+    ).toBe(400)
+    expect(
+      (
+        await request(`conversations/${group}/messages`, {
+          bearer: peer.token,
+          data: { text: 'Group continues', idempotencyKey: randomUUID() },
+        })
+      ).status,
+    ).toBe(201)
+    const unpaired = (
+      await request('agents', { data: { name: 'Disabled unpaired' } })
+    ).data.agentId
+    await request(`agents/${unpaired}`, {
+      method: 'PATCH',
+      data: { disabled: true },
+    })
+    expect((await remove(unpaired)).status).toBe(200)
+  })
+
+  test('deletion races cannot restore credentials or group membership', async () => {
+    const retiring = (
+      await request('agents', { data: { name: 'Concurrent retirement' } })
+    ).data
+    const peer = await createAgent('Concurrent peer')
+    const group = (
+      await request('conversations', {
+        data: {
+          kind: 'group',
+          name: 'Concurrent group',
+          members: [peer.actor.id],
+        },
+      })
+    ).data.id
+    const results = await Promise.all([
+      request('pair', { anonymous: true, data: { code: retiring.code } }),
+      request(`agents/${retiring.agentId}`, { method: 'DELETE' }),
+      request(`conversations/${group}/members`, {
+        bearer: peer.token,
+        data: { members: [retiring.agentId] },
+      }),
+      request(`agents/${retiring.agentId}/enrollment`, { data: {} }),
+    ])
+    expect(results[1].status).toBe(200)
+    expect([200, 400]).toContain(results[0].status)
+    expect([200, 400]).toContain(results[2].status)
+    expect([200, 201, 404]).toContain(results[3].status)
+    if (results[0].data.token)
+      expect(
+        (await request('me', { bearer: results[0].data.token })).status,
+      ).toBe(401)
+    if (results[3].data.code)
+      expect(
+        (
+          await request('pair', {
+            anonymous: true,
+            data: { code: results[3].data.code },
+          })
+        ).status,
+      ).toBe(400)
+    expect(
+      (
+        await adminDb.query(
+          'SELECT token_hash,deleted_at FROM actors WHERE id=$1',
+          [retiring.agentId],
+        )
+      ).rows[0],
+    ).toMatchObject({ token_hash: null, deleted_at: expect.any(Date) })
+    expect(
+      (
+        await adminDb.query(
+          'SELECT 1 FROM conversation_members WHERE actor_id=$1',
+          [retiring.agentId],
+        )
+      ).rowCount,
+    ).toBe(0)
+  })
+
+  test('archiving organizes only the owner list; new messages restore chats without changing receipts', async () => {
+    const a = await createAgent('Archive participant')
+    const b = await createAgent('Archive peer')
+    const chat = (
+      await request('conversations', {
+        data: { kind: 'direct', members: [a.actor.id] },
+      })
+    ).data.id
+    const payload = {
+      text: 'Unread archive fixture',
+      idempotencyKey: randomUUID(),
+    }
+    const sent = await request(`conversations/${chat}/messages`, {
+      bearer: a.token,
+      data: payload,
+    })
+    expect(sent.status).toBe(201)
+    const memberSql =
+      'SELECT * FROM conversation_members WHERE conversation_id=$1 ORDER BY actor_id'
+    const before = (await adminDb.query(memberSql, [chat])).rows
+    const checkBefore = (await request('check', { bearer: a.token })).data
+    const archive = (archived: boolean, bearer?: string, id = chat) =>
+      request(`conversations/${id}/archive`, {
+        method: 'PUT',
+        bearer,
+        data: { archived },
+      })
+    expect((await archive(true, a.token)).status).toBe(403)
+    expect((await archive(true, undefined, randomUUID())).status).toBe(404)
+    expect((await archive(true)).data).toEqual({ archived: true })
+    const archivedAt = (
+      await adminDb.query('SELECT archived_at FROM conversations WHERE id=$1', [
+        chat,
+      ])
+    ).rows[0].archived_at
+    expect((await archive(true)).status).toBe(200)
+    expect(
+      (
+        await adminDb.query(
+          'SELECT archived_at FROM conversations WHERE id=$1',
+          [chat],
+        )
+      ).rows[0].archived_at,
+    ).toEqual(archivedAt)
+    const list = async (folder: string, bearer?: string) =>
+      (await request(`conversations?archive=${folder}`, { bearer })).data
+    expect(
+      (await list('active')).conversations.some((c: Payload) => c.id === chat),
+    ).toBe(false)
+    expect(
+      (await list('archived')).conversations.find((c: Payload) => c.id === chat)
+        .unread,
+    ).toBe(1)
+    expect((await list('archived')).archivedCount).toBe(1)
+    expect(
+      (await list('all')).conversations.some((c: Payload) => c.id === chat),
+    ).toBe(true)
+    expect(
+      (await list('active', a.token)).conversations.find(
+        (c: Payload) => c.id === chat,
+      ).archived_at,
+    ).toBeNull()
+    expect((await request('check', { bearer: a.token })).data).toEqual(
+      checkBefore,
+    )
+    expect((await adminDb.query(memberSql, [chat])).rows).toEqual(before)
+    expect(
+      (
+        await request(`conversations/${chat}/messages`, {
+          bearer: a.token,
+          data: payload,
+        })
+      ).data.duplicate,
+    ).toBe(true)
+    expect((await list('archived')).archivedCount).toBe(1)
+    expect((await archive(false)).data).toEqual({ archived: false })
+    expect(
+      (await list('active')).conversations.some((c: Payload) => c.id === chat),
+    ).toBe(true)
+    await archive(true)
+    expect(
+      (
+        await request(`conversations/${chat}/messages`, {
+          data: { text: 'Owner reply', idempotencyKey: randomUUID() },
+        })
+      ).status,
+    ).toBe(201)
+    expect((await list('archived')).archivedCount).toBe(0)
+    const agentUnread = (await request('check', { bearer: a.token })).data
+    await archive(true)
+    expect((await request('check', { bearer: a.token })).data).toEqual(
+      agentUnread,
+    )
+    expect(
+      (
+        await request(`conversations/${chat}/messages`, {
+          bearer: a.token,
+          data: { text: 'New arrival', idempotencyKey: randomUUID() },
+        })
+      ).status,
+    ).toBe(201)
+    expect((await list('archived')).archivedCount).toBe(0)
+    expect((await adminDb.query(memberSql, [chat])).rows).toEqual(before)
+    const agentOnly = (
+      await request('conversations', {
+        data: { kind: 'direct', members: [a.actor.id, b.actor.id] },
+      })
+    ).data.id
+    expect((await archive(true, undefined, agentOnly)).status).toBe(200)
+    expect(
+      (await list('archived')).conversations.find(
+        (c: Payload) => c.id === agentOnly,
+      ).joined,
+    ).toBe(false)
+    // Leave an archive in the backup fixture, including a chat with a deleted peer.
+    await request(`agents/${b.actor.id}`, { method: 'DELETE' })
+    expect(
+      (await list('archived')).conversations
+        .find((c: Payload) => c.id === agentOnly)
+        .members.some((m: Actor) => m.deleted_at),
+    ).toBe(true)
+  })
+
   test('backup restores database, attachments, avatars, notifications and credentials into an empty target', async () => {
     const destination = join(filesDir, 'backup')
     await execute(
@@ -1715,7 +2148,15 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
     const manifest = JSON.parse(
       await readFile(join(destination, 'manifest.json'), 'utf8'),
     )
-    expect(manifest.files).toHaveLength(2)
+    expect(manifest.files).toHaveLength(
+      Number(
+        (
+          await adminDb.query(
+            'SELECT (SELECT count(*) FROM files)+(SELECT count(*) FROM actors WHERE avatar_id IS NOT NULL) AS count',
+          )
+        ).rows[0].count,
+      ),
+    )
     expect(
       manifest.files.some((file: { id: string }) => file.id === savedAvatarId),
     ).toBe(true)
@@ -1755,9 +2196,14 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
         (await adminDb.query(memberState)).rows,
       )
       const creationState =
-        'SELECT id,created_by,owner_id,creation_key,creation_hash FROM conversations ORDER BY id'
+        'SELECT id,created_by,owner_id,creation_key,creation_hash,archived_at FROM conversations ORDER BY id'
       expect((await restored.query(creationState)).rows).toEqual(
         (await adminDb.query(creationState)).rows,
+      )
+      const identityState =
+        'SELECT id,name,token_hash,disabled_at,deleted_at,avatar_id FROM actors ORDER BY id'
+      expect((await restored.query(identityState)).rows).toEqual(
+        (await adminDb.query(identityState)).rows,
       )
       expect(
         (

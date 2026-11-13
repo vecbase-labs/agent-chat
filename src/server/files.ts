@@ -2,7 +2,7 @@ import { newId } from '../lib/id'
 import { query, transaction } from './db'
 import { getEnv } from './env'
 import { fail } from './errors'
-import { membership } from './conversations'
+import { membership, requireOpenConversation } from './conversations'
 import { hash, readBytes } from './security'
 import type { Actor, Attachment } from '../lib/types'
 import { fileStorage } from './storage'
@@ -52,6 +52,7 @@ export async function uploadFile(
       await client.query('SELECT id FROM conversations WHERE id=$1 FOR SHARE', [
         conversationId,
       ])
+      await requireOpenConversation(client, conversationId)
       if (
         !(
           await client.query(
