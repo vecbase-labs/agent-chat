@@ -7,7 +7,7 @@ import pg from 'pg'
 import { expect, test } from 'vitest'
 import { SCHEMA_VERSION } from '../src/lib/version'
 
-test.each([1, 2, 3, 4])(
+test.each([1, 2, 3, 4, 5])(
   'schema %i upgrades without changing existing identity or credential data',
   async (fromVersion) => {
     const target = new URL(process.env.TEST_DATABASE_URL || '')
@@ -76,6 +76,20 @@ test.each([1, 2, 3, 4])(
           ],
         )
       }
+      if (fromVersion >= 5) {
+        const collaboration = await readFile(
+          'migrations/0005_conversation_creation.sql',
+          'utf8',
+        )
+        await db.query(collaboration)
+        await db.query(
+          'INSERT INTO schema_migrations(version,name,checksum) VALUES(5,$1,$2)',
+          [
+            '0005_conversation_creation.sql',
+            createHash('sha256').update(collaboration).digest('hex'),
+          ],
+        )
+      }
       const owner = randomUUID(),
         agent = randomUUID()
       await db.query(
@@ -128,20 +142,23 @@ test.each([1, 2, 3, 4])(
       )
       const after = (await db.query('SELECT * FROM actors ORDER BY id')).rows
       expect(
-        after.map(({ avatar_id, avatar_sha256, avatar_bytes, ...row }) => {
-          expect([avatar_id, avatar_sha256, avatar_bytes]).toEqual([
-            null,
-            null,
-            null,
-          ])
-          if (fromVersion === 1) {
-            expect(row.last_active_at).toBeNull()
-            delete row.last_active_at
-          }
-          return fromVersion >= 3
-            ? { ...row, avatar_id, avatar_sha256, avatar_bytes }
-            : row
-        }),
+        after.map(
+          ({ avatar_id, avatar_sha256, avatar_bytes, deleted_at, ...row }) => {
+            expect(deleted_at).toBeNull()
+            expect([avatar_id, avatar_sha256, avatar_bytes]).toEqual([
+              null,
+              null,
+              null,
+            ])
+            if (fromVersion === 1) {
+              expect(row.last_active_at).toBeNull()
+              delete row.last_active_at
+            }
+            return fromVersion >= 3
+              ? { ...row, avatar_id, avatar_sha256, avatar_bytes }
+              : row
+          },
+        ),
       ).toEqual(before)
       expect(
         (
@@ -156,9 +173,12 @@ test.each([1, 2, 3, 4])(
       ).toEqual(messagesBefore)
       expect(
         (await db.query('SELECT * FROM conversations ORDER BY id')).rows.map(
-          ({ creation_key, creation_hash, ...row }) => {
+          ({ creation_key, creation_hash, archived_at, ...row }) => {
+            expect(archived_at).toBeNull()
             expect([creation_key, creation_hash]).toEqual([null, null])
-            return row
+            return fromVersion >= 5
+              ? { ...row, creation_key, creation_hash }
+              : row
           },
         ),
       ).toEqual(conversationsBefore)

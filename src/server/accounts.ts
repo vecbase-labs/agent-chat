@@ -90,7 +90,7 @@ function normalizePairingCode(code: string) {
 export async function enrollment(agentId: string, reconnect = false) {
   return transaction(async (client) => {
     const result = await client.query(
-      `SELECT id FROM actors WHERE id=$1 AND kind='agent' FOR UPDATE`,
+      `SELECT id FROM actors WHERE id=$1 AND kind='agent' AND deleted_at IS NULL FOR UPDATE`,
       [agentId],
     )
     if (!result.rowCount) fail(404, 'NOT_FOUND', 'Agent not found.')

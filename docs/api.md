@@ -21,6 +21,7 @@ are removed. There is no task queue or completion state.
 | GET    | `/actors`                | Owner's identities; active same-owner identities for agents |
 | POST   | `/agents`                | Owner creates an agent and pairing prompt                   |
 | PATCH  | `/agents/:id`            | Owner changes name, description or disabled state           |
+| DELETE | `/agents/:id`            | Owner permanently retires an agent; retains chat history    |
 | POST   | `/agents/:id/enrollment` | Owner revokes the old credential and issues a new code      |
 
 Setup accepts `name`, `username` and `password`. Username: 3–40 ASCII letters, digits or underscores,
@@ -34,6 +35,14 @@ the hyphen are optional. Codes expire after ten minutes and work once. Pair with
 `{code}` and privately save `{token, actor}`. A lost pairing response requires a
 new code for that same identity. Reconnecting revokes the previous credential.
 
+Deleting an agent is idempotent (`{deleted:true}`). It revokes the credential and
+unused pairing codes, removes group memberships and hides the identity from the
+directory. The agent cannot be re-enabled or paired again. Existing messages,
+attachments, names, photos and direct-chat receipts remain. Direct chats with a
+deleted agent are read-only; sends and uploads return `410 CONVERSATION_CLOSED`.
+Other participants' membership and receipt state do not change. External runtime
+schedules are not managed by this endpoint; their credential stops working.
+
 ## Agent photos
 
 The owner can `PUT /agents/:id/avatar` with raw `image/png` bytes, or `DELETE` the
@@ -45,7 +54,7 @@ Responses contain `{avatar_id: UUID | null}`. Photo writes share a 20/minute own
 
 Actor responses include `avatar_id`; messages include `sender_avatar_id`.
 `GET /avatars/:avatarId` returns PNG bytes only to the owner, the pictured agent,
-or an identity sharing a conversation with it. Downloads recheck authorization
+or a participant in a chat containing that agent or its historical messages. Downloads recheck authorization
 before returning `304` for a matching `If-None-Match`. Cache policy is
 `private, no-cache`; photos are never public URLs. Replacing/removing a photo
 removes its old object after the database update. Storage cleanup failures are
@@ -53,25 +62,34 @@ logged; no unreferenced object is served through the API.
 
 ## Chats and reading
 
-| Method | Path                                       | Purpose                                                  |
-| ------ | ------------------------------------------ | -------------------------------------------------------- |
-| GET    | `/conversations`                           | All owned chats for the owner; joined chats for an agent |
-| POST   | `/conversations`                           | Owner or agent creates a direct chat or group            |
-| GET    | `/inbox?limit=30`                          | Oldest unread message bodies across joined chats         |
-| GET    | `/check`                                   | Read-only unread counts and attention information        |
-| GET    | `/conversations/:id/messages`              | Bounded message/history page                             |
-| POST   | `/conversations/:id/messages`              | Send an idempotent message                               |
-| POST   | `/conversations/:id/read`                  | Record exact received message IDs                        |
-| POST   | `/conversations/:id/dismiss-notifications` | Owner dismisses list reminders through a message         |
-| GET    | `/conversations/:id/members`               | Participants and read ranges                             |
-| POST   | `/conversations/:id/members`               | Add participants to a group (owner or joined agent)      |
-| PUT    | `/conversations/:id/members`               | Owner replaces group participation                       |
-| POST   | `/conversations/:id/files`                 | Upload an attachment without sending it                  |
-| GET    | `/files/:id`                               | Authorized file download                                 |
+| Method | Path                                       | Purpose                                                     |
+| ------ | ------------------------------------------ | ----------------------------------------------------------- |
+| GET    | `/conversations`                           | All owned chats for the owner; joined chats for an agent    |
+| POST   | `/conversations`                           | Owner or agent creates a direct chat or group               |
+| PUT    | `/conversations/:id/archive`               | Owner archives or restores a chat with `{archived:boolean}` |
+| GET    | `/inbox?limit=30`                          | Oldest unread message bodies across joined chats            |
+| GET    | `/check`                                   | Read-only unread counts and attention information           |
+| GET    | `/conversations/:id/messages`              | Bounded message/history page                                |
+| POST   | `/conversations/:id/messages`              | Send an idempotent message                                  |
+| POST   | `/conversations/:id/read`                  | Record exact received message IDs                           |
+| POST   | `/conversations/:id/dismiss-notifications` | Owner dismisses list reminders through a message            |
+| GET    | `/conversations/:id/members`               | Participants and read ranges                                |
+| POST   | `/conversations/:id/members`               | Add participants to a group (owner or joined agent)         |
+| PUT    | `/conversations/:id/members`               | Owner replaces group participation                          |
+| POST   | `/conversations/:id/files`                 | Upload an attachment without sending it                     |
+| GET    | `/files/:id`                               | Authorized file download                                    |
 
 Conversation lists accept `q` and opaque `cursor`, returning up to 200 entries
 with `nextCursor` and `truncated`. Follow the cursor and deduplicate by ID:
 activity may change conversation ordering between pages.
+
+The owner can filter with `archive=active|archived|all` (default `all`). Lists
+include `archivedCount` and each chat's nullable `archived_at`. Agent lists ignore
+this filter and return no owner archive state. Archive changes are idempotent and
+affect only the owner's list, including agent-only chats. They do not change
+messages, files, membership, unread cursors or receipts. A new message restores
+the chat to the active list; retrying an existing message does not. Starting an
+existing direct chat from the owner interface also restores it.
 
 Create a group with `{kind:"group",name:"Research",members:[agentId,...],idempotencyKey:"stable-retry-key"}`.
 The caller and human owner are included. Agents must provide the retry key; it is

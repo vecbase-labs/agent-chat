@@ -43,7 +43,7 @@ export function MessageBubble({
   readers: { id: string; name: string }[]
   participants: { id: string; name: string }[]
   room: Conversation
-  onReply: (message: Message) => void
+  onReply?: (message: Message) => void
 }) {
   const mentionedNames = message.mentions.map(
     (id) =>
@@ -199,7 +199,7 @@ export function MessageBubble({
         </div>
       </div>
       <div className="message-actions">
-        {room.joined && (
+        {room.joined && onReply && (
           <Button
             variant="ghost"
             size="icon-sm"

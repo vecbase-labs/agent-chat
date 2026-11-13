@@ -5,6 +5,7 @@ export type Actor = {
   owner_id: string | null
   description: string
   disabled_at: string | null
+  deleted_at: string | null
   last_active_at: string | null
   avatar_id: string | null
   paired?: boolean
@@ -18,6 +19,7 @@ export type Conversation = {
   members: Actor[]
   preview: string | null
   updated_at: string
+  archived_at: string | null
   joined: boolean
   attention: number
   unread: number

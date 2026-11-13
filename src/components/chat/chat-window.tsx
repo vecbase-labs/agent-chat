@@ -10,6 +10,8 @@ import {
   Paperclip,
   Reply,
   X,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
@@ -48,6 +50,9 @@ export function ChatWindow({
   onChanged,
   sidebarHidden,
   active,
+  onArchive,
+  archiving,
+  onRestored,
 }: {
   room: Conversation
   actor: Actor
@@ -56,7 +61,13 @@ export function ChatWindow({
   onChanged: () => void
   sidebarHidden: boolean
   active: boolean
+  onArchive: () => void
+  archiving: boolean
+  onRestored: () => void
 }) {
+  const deletedPeer =
+    room.kind === 'direct' && room.members.some((member) => member.deleted_at)
+  const canSend = room.joined && !deletedPeer
   const client = useQueryClient()
   const key = ['messages', room.id]
   const scroll = useRef<HTMLDivElement>(null)
@@ -102,6 +113,10 @@ export function ChatWindow({
     retry: false,
   })
   const latest = messages.data?.messages.at(-1)?.seq
+  useEffect(() => {
+    if (room.archived_at && latest && BigInt(latest) > BigInt(room.last_seq))
+      onRestored()
+  }, [room.archived_at, room.last_seq, latest, onRestored])
   const receipts = useQuery({
     queryKey: ['receipts', room.id],
     queryFn: () =>
@@ -206,7 +221,12 @@ export function ChatWindow({
       document.removeEventListener('visibilitychange', acknowledgeVisible)
   }, [acknowledgeVisible])
   async function send() {
-    if (sending || uploading || (!draft.text.trim() && files.length === 0))
+    if (
+      !canSend ||
+      sending ||
+      uploading ||
+      (!draft.text.trim() && files.length === 0)
+    )
       return
     const data = {
       text: draft.text,
@@ -243,7 +263,7 @@ export function ChatWindow({
     }
   }
   async function upload(chosen: FileList | null) {
-    if (!room.joined || !chosen?.length || uploadBusy.current || sending) return
+    if (!canSend || !chosen?.length || uploadBusy.current || sending) return
     if (files.length + chosen.length > 4) {
       toast.error('Up to 4 attachments per message.')
       return
@@ -285,8 +305,8 @@ export function ChatWindow({
         if (event.dataTransfer.types.includes('Files')) {
           event.preventDefault()
           event.dataTransfer.dropEffect =
-            !room.joined || uploading || sending ? 'none' : 'copy'
-          setDragging(room.joined && !uploading && !sending)
+            !canSend || uploading || sending ? 'none' : 'copy'
+          setDragging(canSend && !uploading && !sending)
         }
       }}
       onDragLeave={(event) => {
@@ -331,15 +351,27 @@ export function ChatWindow({
             {roomTitle(room, actor)}
           </h2>
           <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
-            {room.kind === 'group' || !room.joined
-              ? `${room.members.length} participants`
-              : other?.kind === 'agent'
-                ? other.disabled_at
-                  ? 'Disabled'
-                  : 'Your agent'
-                : 'Direct conversation'}
+            {deletedPeer
+              ? 'Deleted agent'
+              : room.kind === 'group' || !room.joined
+                ? `${room.members.length} participants`
+                : other?.kind === 'agent'
+                  ? other.disabled_at
+                    ? 'Disabled'
+                    : 'Your agent'
+                  : 'Direct conversation'}
           </p>
         </button>
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={archiving}
+          onClick={onArchive}
+          aria-label={room.archived_at ? 'Unarchive chat' : 'Archive chat'}
+          title={room.archived_at ? 'Unarchive chat' : 'Archive chat'}
+        >
+          {room.archived_at ? <ArchiveRestore /> : <Archive />}
+        </Button>
         <Button
           variant="ghost"
           size="icon"
@@ -349,10 +381,16 @@ export function ChatWindow({
           <Info />
         </Button>
       </header>
-      {!room.joined && (
+      {deletedPeer ? (
         <div className="border-b bg-muted px-5 py-3 text-sm text-muted-foreground">
-          A conversation between your agents
+          This agent was deleted. Your messages and files are still here.
         </div>
+      ) : (
+        !room.joined && (
+          <div className="border-b bg-muted px-5 py-3 text-sm text-muted-foreground">
+            A conversation between your agents
+          </div>
+        )
       )}
       <div
         ref={scroll}
@@ -435,12 +473,14 @@ export function ChatWindow({
                 className="mx-auto mb-5 size-16 text-2xl"
               />
               <h3 className="text-xl font-medium">
-                {room.joined ? 'Start the conversation' : 'No messages yet'}
+                {canSend ? 'Start the conversation' : 'No messages yet'}
               </h3>
               <p className="mt-2 text-base text-muted-foreground">
-                {room.joined
-                  ? 'Say hello, share a file, or ask a question.'
-                  : 'Messages from these participants will appear here.'}
+                {deletedPeer
+                  ? 'This chat is read-only.'
+                  : room.joined
+                    ? 'Say hello, share a file, or ask a question.'
+                    : 'Messages from these participants will appear here.'}
               </p>
             </div>
           )}
@@ -486,10 +526,14 @@ export function ChatWindow({
                   readers={readers}
                   participants={receipts.data?.members || room.members}
                   room={room}
-                  onReply={(item) => {
-                    setReply(item)
-                    textarea.current?.focus()
-                  }}
+                  onReply={
+                    canSend
+                      ? (item) => {
+                          setReply(item)
+                          textarea.current?.focus()
+                        }
+                      : undefined
+                  }
                 />
               </div>
             )
@@ -518,7 +562,7 @@ export function ChatWindow({
           </Button>
         </div>
       )}
-      {room.joined && (
+      {canSend && (
         <footer
           className="chat-footer relative shrink-0 px-3 pt-3 sm:px-6 md:px-8"
           onPaste={(event) => {

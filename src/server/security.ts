@@ -10,7 +10,7 @@ export const uuid = z.string().uuid()
 export const hash = (value: string | Uint8Array) =>
   createHash('sha256').update(value).digest('hex')
 export const actorColumns =
-  'id,name,kind,owner_id,description,disabled_at,last_active_at,avatar_id'
+  'id,name,kind,owner_id,description,disabled_at,deleted_at,last_active_at,avatar_id'
 
 export async function recordAgentActivity(actor: Actor) {
   if (

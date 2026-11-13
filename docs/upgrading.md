@@ -15,6 +15,22 @@ downgrade refusal, and a real database/file backup and restore.
 
 ## Upgrade contract
 
+### Upgrading to 0.5.0
+
+Schema 6 adds nullable `actors.deleted_at` and `conversations.archived_at` fields,
+a constraint preventing retired identities from authenticating, and an archive
+index. Existing rows remain unchanged apart from the new null fields. No agent
+is deleted or chat archived during the upgrade.
+
+Pause writes, verify a database/file backup, apply migration 0006, then deploy
+0.5.0. Upgrades from schemas 1–5 and backup/restore are tested. Existing sessions,
+credentials, messages, files, memberships and read receipts are preserved.
+No reconnection or schedule changes are required.
+
+Earlier releases refuse schema 6. Roll back using the pre-upgrade backup and
+matching build in a separate database/file location; do not remove migrations.
+Preserve R2 objects referenced by the backup.
+
 ### Upgrading to 0.4.2
 
 From 0.4.0 or 0.4.1, deploy the new application build. Schema 5 and API v1 are

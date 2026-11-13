@@ -15,6 +15,7 @@ import {
   uuid,
 } from './security'
 import { accountInput, enrollment, pair, setup } from './accounts'
+import { deleteAgent } from './agents'
 import {
   conversationInput,
   createConversation,
@@ -30,6 +31,7 @@ import {
   sendInput,
   sendMessage,
   updateMembers,
+  archiveConversation,
 } from './conversations'
 import { downloadFile, uploadFile } from './files'
 import { readAvatar, updateAvatar } from './avatars'
@@ -106,7 +108,7 @@ async function route(request: Request, activity: { actor?: Actor }) {
   if (resource === 'actors' && method === 'GET')
     return json({
       actors: await query<Actor>(
-        `SELECT ${actorColumns},(token_hash IS NOT NULL) AS paired FROM actors WHERE (id=$1 OR owner_id=$1) AND ($2::boolean OR disabled_at IS NULL) ORDER BY kind,name,id LIMIT 1000`,
+        `SELECT ${actorColumns},(token_hash IS NOT NULL) AS paired FROM actors WHERE deleted_at IS NULL AND (id=$1 OR owner_id=$1) AND ($2::boolean OR disabled_at IS NULL) ORDER BY kind,name,id LIMIT 1000`,
         [actor.owner_id || actor.id, actor.kind === 'human'],
       ),
     })
@@ -119,7 +121,11 @@ async function route(request: Request, activity: { actor?: Actor }) {
         await client.query('SELECT pg_advisory_xact_lock(81724004)')
         if (
           Number(
-            (await client.query('SELECT count(*) FROM actors')).rows[0].count,
+            (
+              await client.query(
+                'SELECT count(*) FROM actors WHERE deleted_at IS NULL',
+              )
+            ).rows[0].count,
           ) >= 1000
         )
           fail(409, 'LIMIT_REACHED', 'Identity limit reached for this release.')
@@ -170,10 +176,12 @@ async function route(request: Request, activity: { actor?: Actor }) {
       return json(await enrollment(agentId), 201)
     }
     uuid.parse(id)
+    if (!action && method === 'DELETE')
+      return json(await deleteAgent(actor, id))
     if (
       !(
         await query(
-          "SELECT 1 FROM actors WHERE id=$1 AND owner_id=$2 AND kind='agent'",
+          "SELECT 1 FROM actors WHERE id=$1 AND owner_id=$2 AND kind='agent' AND deleted_at IS NULL",
           [id, actor.id],
         )
       ).length
@@ -198,7 +206,7 @@ async function route(request: Request, activity: { actor?: Actor }) {
         const result = await client.query(
           `UPDATE actors SET name=COALESCE($2,name),description=COALESCE($3,description),
           disabled_at=CASE WHEN $4::boolean=true THEN now() WHEN $4::boolean=false THEN NULL ELSE disabled_at END,
-          token_hash=CASE WHEN $4::boolean=true THEN NULL ELSE token_hash END WHERE id=$1 AND kind='agent' RETURNING id`,
+          token_hash=CASE WHEN $4::boolean=true THEN NULL ELSE token_hash END WHERE id=$1 AND kind='agent' AND deleted_at IS NULL RETURNING id`,
           [id, input.name, input.description, input.disabled],
         )
         if (!result.rowCount) fail(404, 'NOT_FOUND', 'Agent not found.')
@@ -225,6 +233,9 @@ async function route(request: Request, activity: { actor?: Actor }) {
             .max(400)
             .optional()
             .parse(url.searchParams.get('cursor') || undefined),
+          z
+            .enum(['all', 'active', 'archived'])
+            .parse(url.searchParams.get('archive') || 'all'),
         ),
       )
     if (!id && method === 'POST') {
@@ -232,6 +243,15 @@ async function route(request: Request, activity: { actor?: Actor }) {
       return json(await createConversation(actor, input), 201)
     }
     uuid.parse(id)
+    if (action === 'archive' && method === 'PUT')
+      return json(
+        await archiveConversation(
+          actor,
+          id,
+          (await body(request, z.strictObject({ archived: z.boolean() })))
+            .archived,
+        ),
+      )
     if (action === 'messages' && method === 'GET') {
       const after = url.searchParams.get('after'),
         before = url.searchParams.get('before'),

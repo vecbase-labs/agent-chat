@@ -15,11 +15,20 @@ import {
   Search,
   Settings,
   Sun,
+  Archive,
+  ArchiveRestore,
+  MoreHorizontal,
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
 import { Input } from '#/components/ui/input'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '#/components/ui/dropdown-menu'
 import {
   Tooltip,
   TooltipContent,
@@ -55,15 +64,21 @@ export function ChatShell({
   const [query, setQuery] = useState('')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [unread, setUnread] = useState(false)
+  const [archived, setArchived] = useState(false)
+  const [archivingId, setArchivingId] = useState<string | null>(null)
   const [dialog, setDialog] = useState<'new' | 'details' | null>(null)
   const client = useQueryClient()
   const { resolvedTheme, setTheme } = useTheme()
   const rooms = useInfiniteQuery({
-    queryKey: ['conversations', query],
+    queryKey: ['conversations', query, archived],
     initialPageParam: '',
     queryFn: ({ signal, pageParam }) =>
-      api<{ conversations: Conversation[]; nextCursor: string | null }>(
-        `conversations?${new URLSearchParams({ q: query, ...(pageParam ? { cursor: pageParam } : {}) })}`,
+      api<{
+        conversations: Conversation[]
+        nextCursor: string | null
+        archivedCount: number
+      }>(
+        `conversations?${new URLSearchParams({ q: query, archive: archived ? 'archived' : 'active', ...(pageParam ? { cursor: pageParam } : {}) })}`,
         { signal },
       ),
     getNextPageParam: (page) => page.nextCursor || undefined,
@@ -90,7 +105,44 @@ export function ChatShell({
     void client.invalidateQueries({ queryKey: ['conversations'] })
     void client.invalidateQueries({ queryKey: ['actors'] })
   }, [client])
+  const restoreOpenedChat = useCallback(() => {
+    setArchived(false)
+    setQuery('')
+    setUnread(false)
+    setOpenedRoom((room) => (room ? { ...room, archived_at: null } : room))
+    refresh()
+  }, [refresh])
   const filtered = conversations.filter((c) => !unread || c.unread > 0)
+  function selectFolder(next: boolean) {
+    setArchived(next)
+    setUnread(false)
+    setSelectedId(null)
+    setOpenedRoom(null)
+  }
+  async function archiveChat(room: Conversation) {
+    if (archivingId) return
+    setArchivingId(room.id)
+    try {
+      const next = !room.archived_at
+      await api(`conversations/${room.id}/archive`, {
+        method: 'PUT',
+        body: JSON.stringify({ archived: next }),
+      })
+      if (selectedId === room.id) {
+        setSelectedId(null)
+        setOpenedRoom(null)
+        setDialog(null)
+      }
+      refresh()
+      toast.success(next ? 'Chat archived' : 'Chat moved to Chats')
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Unable to archive chat.',
+      )
+    } finally {
+      setArchivingId(null)
+    }
+  }
   return (
     <TooltipProvider delayDuration={200}>
       <main className="flex h-dvh w-full overflow-hidden bg-background">
@@ -174,7 +226,7 @@ export function ChatShell({
           >
             <header className="flex h-[76px] shrink-0 items-center justify-between gap-2 px-5">
               <h1 className="truncate text-[22px] font-semibold tracking-tight">
-                Chats
+                {archived ? 'Archived' : 'Chats'}
               </h1>
               <div className="flex items-center">
                 <Button
@@ -212,14 +264,16 @@ export function ChatShell({
                 <Button
                   size="sm"
                   variant="ghost"
-                  aria-pressed={!unread}
+                  aria-pressed={!unread && !archived}
                   className={cn(
                     'h-8 rounded-full px-3.5',
-                    !unread
+                    !unread && !archived
                       ? 'bg-primary/10 text-primary hover:bg-primary/15'
                       : 'text-muted-foreground',
                   )}
-                  onClick={() => setUnread(false)}
+                  onClick={() =>
+                    archived ? selectFolder(false) : setUnread(false)
+                  }
                 >
                   All
                 </Button>
@@ -233,11 +287,38 @@ export function ChatShell({
                       ? 'bg-primary/10 text-primary hover:bg-primary/15'
                       : 'text-muted-foreground',
                   )}
-                  onClick={() => setUnread(true)}
+                  onClick={() => {
+                    if (archived) selectFolder(false)
+                    setUnread(true)
+                  }}
                 >
                   Unread
                 </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-pressed={archived}
+                  className={cn(
+                    'ml-auto h-8 rounded-full px-3',
+                    archived
+                      ? 'bg-primary/10 text-primary hover:bg-primary/15'
+                      : 'text-muted-foreground',
+                  )}
+                  onClick={() => selectFolder(true)}
+                >
+                  <Archive className="size-3.5" /> Archived
+                  {!!rooms.data?.pages[0].archivedCount && (
+                    <span className="text-xs tabular-nums">
+                      {rooms.data.pages[0].archivedCount}
+                    </span>
+                  )}
+                </Button>
               </div>
+              {archived && (
+                <p className="mt-3 px-1 text-xs leading-relaxed text-muted-foreground">
+                  New messages move archived chats back to Chats.
+                </p>
+              )}
             </div>
             <div className="chat-scroll min-h-0 flex-1 overflow-y-auto px-2.5 pb-4">
               {rooms.error && (
@@ -278,11 +359,13 @@ export function ChatShell({
                   <p className="font-medium">
                     {query
                       ? 'No conversations found'
-                      : unread
-                        ? 'You’re all caught up'
-                        : 'Your conversations start here'}
+                      : archived
+                        ? 'No archived chats'
+                        : unread
+                          ? 'You’re all caught up'
+                          : 'Your conversations start here'}
                   </p>
-                  {!query && !unread && (
+                  {!query && !unread && !archived && (
                     <Button
                       className="mt-5"
                       variant="outline"
@@ -297,74 +380,96 @@ export function ChatShell({
                 const other = room.members.find((a) => a.id !== actor.id)
                 const count = room.unread
                 return (
-                  <button
-                    key={room.id}
-                    onClick={() => {
-                      setOpenedRoom(room)
-                      setSelectedId(room.id)
-                    }}
-                    aria-current={selectedId === room.id ? 'true' : undefined}
-                    className={cn(
-                      'conversation-row mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left',
-                      selectedId === room.id && 'is-selected',
-                    )}
-                  >
-                    <ChatAvatar
-                      name={roomTitle(room, actor)}
-                      kind={room.kind === 'group' ? 'group' : other?.kind}
-                      members={room.members}
-                      avatarId={
-                        room.kind === 'direct'
-                          ? room.members.find(
-                              (member) => member.id !== actor.id,
-                            )?.avatar_id
-                          : undefined
-                      }
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-2">
-                        <span
-                          className={cn(
-                            'truncate text-[15px] font-medium',
-                            count > 0 && 'font-semibold',
-                          )}
-                        >
-                          {roomTitle(room, actor)}
-                        </span>
-                        <time
-                          dateTime={room.updated_at}
-                          title={new Date(room.updated_at).toLocaleString()}
-                          className={cn(
-                            'shrink-0 text-xs tabular-nums text-muted-foreground',
-                            count > 0 && 'font-medium text-primary',
-                          )}
-                        >
-                          {conversationTime(room.updated_at)}
-                        </time>
-                      </span>
-                      <span className="mt-1 flex items-center gap-2">
-                        <span
-                          className={cn(
-                            'truncate min-w-0 flex-1 text-[13px] leading-5 text-muted-foreground',
-                            count > 0 && 'text-foreground/75',
-                          )}
-                        >
-                          {room.preview ||
-                            (room.last_seq !== '0'
-                              ? 'Attachment'
-                              : 'No messages yet')}
-                        </span>
-                        {count > 0 && (
+                  <div key={room.id} className="group/room relative">
+                    <button
+                      onClick={() => {
+                        setOpenedRoom(room)
+                        setSelectedId(room.id)
+                      }}
+                      aria-current={selectedId === room.id ? 'true' : undefined}
+                      className={cn(
+                        'conversation-row mb-1 flex w-full items-center gap-3 rounded-xl py-3 pl-3 pr-10 text-left',
+                        selectedId === room.id && 'is-selected',
+                      )}
+                    >
+                      <ChatAvatar
+                        name={roomTitle(room, actor)}
+                        kind={room.kind === 'group' ? 'group' : other?.kind}
+                        members={room.members}
+                        avatarId={
+                          room.kind === 'direct'
+                            ? room.members.find(
+                                (member) => member.id !== actor.id,
+                              )?.avatar_id
+                            : undefined
+                        }
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center justify-between gap-2">
                           <span
-                            aria-label={`${count} unread messages`}
-                            className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground"
+                            className={cn(
+                              'truncate text-[15px] font-medium',
+                              count > 0 && 'font-semibold',
+                            )}
                           >
-                            {count > 99 ? '99+' : String(count)}
+                            {roomTitle(room, actor)}
                           </span>
-                        )}
+                          <time
+                            dateTime={room.updated_at}
+                            title={new Date(room.updated_at).toLocaleString()}
+                            className={cn(
+                              'shrink-0 text-xs tabular-nums text-muted-foreground',
+                              count > 0 && 'font-medium text-primary',
+                            )}
+                          >
+                            {conversationTime(room.updated_at)}
+                          </time>
+                        </span>
+                        <span className="mt-1 flex items-center gap-2">
+                          <span
+                            className={cn(
+                              'truncate min-w-0 flex-1 text-[13px] leading-5 text-muted-foreground',
+                              count > 0 && 'text-foreground/75',
+                            )}
+                          >
+                            {room.preview ||
+                              (room.last_seq !== '0'
+                                ? 'Attachment'
+                                : 'No messages yet')}
+                          </span>
+                          {count > 0 && (
+                            <span
+                              aria-label={`${count} unread messages`}
+                              className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-foreground"
+                            >
+                              {count > 99 ? '99+' : String(count)}
+                            </span>
+                          )}
+                        </span>
                       </span>
-                    </span>
-                  </button>
+                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`More options for ${roomTitle(room, actor)}`}
+                          className="absolute right-1 top-4 size-7 text-muted-foreground md:opacity-0 md:group-hover/room:opacity-100 md:focus-visible:opacity-100 data-[state=open]:opacity-100"
+                        >
+                          <MoreHorizontal className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          disabled={!!archivingId}
+                          onSelect={() => void archiveChat(room)}
+                        >
+                          {room.archived_at ? <ArchiveRestore /> : <Archive />}
+                          {room.archived_at ? 'Unarchive chat' : 'Archive chat'}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 )
               })}
               {rooms.hasNextPage && (
@@ -406,6 +511,9 @@ export function ChatShell({
                 onChanged={refresh}
                 sidebarHidden={!sidebarOpen}
                 active={view === 'chats'}
+                onArchive={() => void archiveChat(selected)}
+                archiving={!!archivingId}
+                onRestored={restoreOpenedChat}
               />
             ) : (
               <section
@@ -454,6 +562,9 @@ export function ChatShell({
               onClose={() => setDialog(null)}
               onCreated={(id) => {
                 setDialog(null)
+                setArchived(false)
+                setQuery('')
+                setUnread(false)
                 setSelectedId(id)
                 refresh()
               }}
@@ -478,6 +589,7 @@ export function ChatShell({
             onRefresh={refresh}
             onOpenChat={(id) => {
               setQuery('')
+              setArchived(false)
               setUnread(false)
               setSelectedId(id)
               openView('chats')

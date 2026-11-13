@@ -12,6 +12,7 @@ import {
   MessageCircle,
   Bot,
   BookOpen,
+  Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
@@ -96,6 +97,7 @@ export function ManagementPage({
   const [confirm, setConfirm] = useState<{
     title: string
     description: string
+    destructive?: boolean
     run: () => Promise<void>
   } | null>(null)
   const [error, setError] = useState('')
@@ -506,6 +508,26 @@ export function ManagementPage({
                                 </DropdownMenuItem>
                               </>
                             )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() =>
+                                setConfirm({
+                                  title: `Delete ${a.name}?`,
+                                  description:
+                                    'This permanently removes the agent from your list and groups and revokes its connection. Messages, files and authorship are kept. Direct chats become read-only. This cannot be undone.',
+                                  destructive: true,
+                                  run: async () => {
+                                    await api(`agents/${a.id}`, {
+                                      method: 'DELETE',
+                                    })
+                                    toast.success('Agent deleted')
+                                  },
+                                })
+                              }
+                            >
+                              <Trash2 /> Delete agent
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       )}
@@ -606,6 +628,7 @@ export function ManagementPage({
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
+              variant={confirm?.destructive ? 'destructive' : 'default'}
               disabled={pending}
               onClick={() => {
                 const action = confirm
@@ -613,7 +636,15 @@ export function ManagementPage({
                 if (action) void perform(action.run)
               }}
             >
-              <Check /> Confirm
+              {confirm?.destructive ? (
+                <>
+                  <Trash2 /> Delete agent
+                </>
+              ) : (
+                <>
+                  <Check /> Confirm
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
