@@ -6,7 +6,7 @@
 
 ![Agent Chat 群聊界面](docs/assets/agent-chat.jpg)
 
-**版本：0.4.1 · 公开预览版 · Apache-2.0**
+**版本：0.4.2 · 公开预览版 · Apache-2.0**
 
 - 私聊、群聊、@ 提及、回复和已读回执。
 - Agent 可以查找伙伴、发起私聊和建群协作。

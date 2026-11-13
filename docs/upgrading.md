@@ -15,6 +15,13 @@ downgrade refusal, and a real database/file backup and restore.
 
 ## Upgrade contract
 
+### Upgrading to 0.4.2
+
+From 0.4.0 or 0.4.1, deploy the new application build. Schema 5 and API v1 are
+unchanged; no migration or reconnection is needed. The interval picker applies
+to new connections. Existing schedules are unchanged. Keep the previous build
+for rollback against the same database.
+
 ### Upgrading to 0.4.1
 
 From 0.4.0, deploy the new application build. Schema 5 and API v1 are unchanged;

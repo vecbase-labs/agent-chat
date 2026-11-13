@@ -42,6 +42,7 @@ import {
   connectionClients,
   connectionHints,
   connectionPrompt,
+  DEFAULT_CHECK_INTERVAL_MINUTES,
 } from '#/lib/agent-connection'
 import type { ConnectionClient } from '#/lib/agent-connection'
 import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH } from '#/lib/password-policy'
@@ -49,6 +50,7 @@ import { ChatAvatar } from './avatar'
 import { AvatarPicker } from './avatar-picker'
 import { AppearanceSettings } from './appearance'
 import { AgentActivity } from './agent-activity'
+import { ConnectionInterval } from './connection-interval'
 import type { Actor } from '#/lib/types'
 
 type Enrollment = {
@@ -56,6 +58,7 @@ type Enrollment = {
   expiresIn: number
   server: string
   agentId: string
+  initialConnection?: boolean
 }
 type Props = {
   mode: 'agents' | 'settings'
@@ -84,6 +87,9 @@ export function ManagementPage({
   const [selected, setSelected] = useState<Actor | null>(null)
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
   const [enrollmentName, setEnrollmentName] = useState('')
+  const [checkIntervalMinutes, setCheckIntervalMinutes] = useState<
+    number | null | undefined
+  >(DEFAULT_CHECK_INTERVAL_MINUTES)
   const [connectionClient, setConnectionClient] =
     useState<ConnectionClient>('General')
   const [pending, setPending] = useState(false)
@@ -139,7 +145,8 @@ export function ManagementPage({
         }
         setEnrollmentName(name)
         setConnectionClient('General')
-        setEnrollment(data)
+        setCheckIntervalMinutes(DEFAULT_CHECK_INTERVAL_MINUTES)
+        setEnrollment({ ...data, initialConnection: true })
         setCreating(false)
       }
     })
@@ -165,9 +172,15 @@ export function ManagementPage({
       toast.error('Copy is unavailable. Select and copy the text manually.')
     }
   }
-  const prompt = enrollment
-    ? connectionPrompt(connectionClient, enrollment, enrollmentName)
-    : ''
+  const prompt =
+    enrollment && (!enrollment.code || checkIntervalMinutes !== null)
+      ? connectionPrompt(
+          connectionClient,
+          enrollment,
+          enrollmentName,
+          enrollment.code ? (checkIntervalMinutes ?? undefined) : undefined,
+        )
+      : ''
   const title = enrollment
     ? `${enrollment.code ? 'Connect' : 'Update'} ${enrollmentName}`
     : creating
@@ -248,10 +261,18 @@ export function ManagementPage({
                   {connectionHints[connectionClient]}
                 </p>
               </div>
+              {enrollment.code && (
+                <ConnectionInterval
+                  key={enrollment.code}
+                  preserveExisting={!enrollment.initialConnection}
+                  onChange={setCheckIntervalMinutes}
+                />
+              )}
               <Textarea
                 aria-label="Connection prompt"
                 readOnly
                 value={prompt}
+                placeholder="Choose a check interval to generate your connection prompt."
                 className="min-h-32 text-base leading-relaxed"
               />
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -448,7 +469,11 @@ export function ManagementPage({
                                     )
                                     setEnrollmentName(a.name)
                                     setConnectionClient('General')
-                                    setEnrollment(data)
+                                    setCheckIntervalMinutes(undefined)
+                                    setEnrollment({
+                                      ...data,
+                                      initialConnection: false,
+                                    })
                                   },
                                 })
                               }

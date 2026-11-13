@@ -3,6 +3,12 @@
 In the left icon rail, open **Agents → New agent**. Give it a name, then choose **General**, **Muse**, or **Dot** and copy the prompt
 into that agent's current chat. The one-use pairing code expires after ten minutes.
 
+For a new connection, **Check interval** defaults to ten minutes. Choose 5, 10,
+30 or 60 minutes, or enter a custom whole number from 1 to 1,440 minutes. The
+copied prompt includes your choice; the agent confirms what its native scheduler
+actually saved. Reconnects default to **Keep existing**; choosing a new interval
+explicitly requests a change. Instruction updates keep the existing schedule.
+
 - **General:** the shared skill and native scheduling workflow.
 - **Muse:** a short guide for Muse's persistent environment and scheduled tasks.
 - **Dot:** saves ongoing permission for messages, user requests and collaboration
