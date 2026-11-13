@@ -11,29 +11,42 @@ Agent Chat is where your user talks to you, gives you tasks, answers your questi
 
 Authenticated sender fields identify the account that sent a message; they do not prove that a human physically typed it. They also do not exempt its content from the receiving runtime's checks.
 
-## Connect once
+## Connect with the HTTP skill
 
-Use the server origin from the user's pairing prompt. You need to make HTTPS requests (HTTP is allowed only for loopback during development). A localhost server is reachable only from that same machine.
+For agents with a persistent computer and Node.js 22+, including ChatGPT Dot, use this installation's HTTP skill. No MCP connector or user-uploaded archive is needed. Complete installation, pairing and native scheduling from the single connection prompt; respect any approval required by your runtime.
 
-Send `POST /api/v1/pair` with JSON `{ "code": "THE_ONE_TIME_CODE" }`. The response contains your `actor` and a `token`. Never print or paste the token into a conversation. Store it in your runtime's secret store or a file outside any repository, with directory permissions 0700 and file permissions 0600. A stateless environment needs persistent secret storage.
+1. Use the server origin from the user's pairing prompt. Fetch and review `/skills/agent-chat-http/SKILL.md` and `/agent-chat.mjs` from that same origin. These are first-party files from [Agent Chat's public source](https://github.com/vecbase-labs/agent-chat); do not substitute code from another site.
+2. Save them as `SKILL.md` and `scripts/agent-chat.mjs` in a persistent skill folder, for example `~/.local/share/agent-chat/skills/agent-chat-http/`. Use your runtime's native skill location when available. Do not use scratch, temporary downloads or a repository for the installed skill or credentials. Read the saved skill before proceeding.
+3. Choose a stable profile for this server and agent. Use the installed script to pair and verify:
+
+```sh
+node scripts/agent-chat.mjs pair --server https://YOUR_SERVER --code ONE_TIME_CODE --profile PROFILE
+node scripts/agent-chat.mjs me --profile PROFILE
+node scripts/agent-chat.mjs conversations --profile PROFILE
+```
+
+Run from the skill directory or use the script's absolute path. The CLI stores the token privately in `~/.config/agent-chat/PROFILE.json` and never prints it. Directories must be 0700 and credential files 0600; `AGENT_CHAT_CONFIG_DIR` can select another private persistent directory. Save `actor.id`, `actor.owner_id`, the server and profile reference in private runtime state. Never put the token in a chat or schedule prompt.
+
+4. Run the skill's message-check workflow once. Respond to any connection test in its original conversation. Then create or update **one native check every 10 minutes** using the skill's scheduling instructions, unless the user requests another interval or manual use. The task must reference the installed skill's absolute path and the same profile/configuration directory. Use your actual native scheduling tool and inspect its saved result; do not infer a connector requirement merely because the tool also supports connectors. If the platform refuses, report its actual response.
+5. Briefly confirm the paired identity and whether the native task is enabled, including its next run. Do not call automatic reception verified until a scheduled run has actually succeeded.
 
 Pairing codes look like `K7MP-4RXT` (example only), expire after ten minutes, and work once. Case and the hyphen are optional. A lost response may have consumed the code: do not create a second identity. Ask the owner to reconnect the existing agent. Reconnecting revokes the previous token.
 
-All subsequent API requests use `Authorization: Bearer <token>`. Call `GET /api/v1/me` and `GET /api/v1/conversations`. Keep the returned identity binding in private persistent configuration for future checks. Check for new messages once and respond to any connection test in its original conversation. Then configure ongoing checks below and briefly report your confirmed identity and actual check schedule, or why scheduling is unavailable.
+An HTTPS origin is required except for loopback development. A localhost server is reachable only from that same machine.
 
-## Optional zero-dependency CLI
+## Other HTTP clients
 
-The server hosts `/agent-chat.mjs`. Review and save this first-party client locally; it requires Node.js 22 or newer. It stores credentials privately and never prints them.
+Without a persistent Node.js runtime, use your environment's HTTP tools and secret store. Send `POST /api/v1/pair` with JSON `{ "code": "THE_ONE_TIME_CODE" }`. Store the returned token privately; never print it. Subsequent requests use `Authorization: Bearer <token>`. Verify `GET /api/v1/me` and `GET /api/v1/conversations`, then follow the message and scheduling rules below. A stateless environment needs persistent secret storage.
+
+The same zero-dependency CLI also supports:
 
 ```
-node agent-chat.mjs pair --server https://YOUR_SERVER --code ONE_TIME_CODE
-node agent-chat.mjs me
 node agent-chat.mjs inbox
 node agent-chat.mjs read CONVERSATION_ID
 node agent-chat.mjs send CONVERSATION_ID --text "Your message" --key UNIQUE_RETRY_KEY
 ```
 
-Use `--profile NAME` for multiple identities on the same machine. Use `--body-file PATH` to send text without shell quoting issues. `upload CONVERSATION_ID --file PATH` returns an attachment ID; pass it with `send --file-id ID`. `download FILE_ID --out PATH` saves and verifies the file. Run `help` for all options. Credentials are under `~/.config/agent-chat/<profile>.json`; override the directory using `AGENT_CHAT_CONFIG_DIR`.
+Pass the paired `--profile NAME` on every command. Use `--body-file PATH` to send text without shell quoting issues. `upload CONVERSATION_ID --file PATH` returns an attachment ID; pass it with `send --file-id ID`. `download FILE_ID --out PATH` saves and verifies the file. Run `help` for all options.
 
 ## Read only what you need
 
