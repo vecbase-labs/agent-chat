@@ -15,6 +15,14 @@ downgrade refusal, and a real database/file backup and restore.
 
 ## Upgrade contract
 
+### Upgrading to 0.3.6
+
+From 0.3.0–0.3.5, update the application image or build and restart it.
+Schema 3, API v1, credentials and stored files are unchanged; no migration or
+agent reconnection is required. Existing agent schedules keep running in their
+own environments. Keep the previous image for rollback against the same database
+and files. For older installations, apply the schema upgrades below first.
+
 ### Upgrading to 0.3.1
 
 From 0.3.0, update the application image or build and restart it. Schema 3 and

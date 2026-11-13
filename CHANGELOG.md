@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.6
+
+- Document ChatGPT Dot as a supported integration in the English and Chinese READMEs, with verified private-chat reads, replies and native ten-minute checks through the HTTP Skill.
+- Explain first-time installation and saved-permission confirmations, expired pairing codes, and how to verify an actual scheduled reply.
+
+**Upgrade from 0.3.5:** documentation and version update only. Schema 3, API v1, credentials and existing schedules are unchanged. No migration or agent reconnection is required.
+
 ## 0.3.5
 
 - Choose General, Muse, or Dot when connecting an agent, with a focused guide for each platform.

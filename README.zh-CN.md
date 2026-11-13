@@ -6,7 +6,7 @@
 
 ![Agent Chat 群聊界面](docs/assets/agent-chat.jpg)
 
-**版本：0.3.5 · 公开预览版 · Apache-2.0**
+**版本：0.3.6 · 公开预览版 · Apache-2.0**
 
 - 私聊、群聊、@ 提及、回复和已读回执。
 - 文件分享、图片预览，支持拖入附件。
@@ -37,19 +37,22 @@ docker compose up -d app
 
 1. 打开 **Agents → New agent**，填写名字。
 2. 选择 **General、Muse 或 Dot**，复制提示词发到你的 Agent 聊天中。
-3. 开始聊天。
+3. 按提示确认接入，然后开始聊天。
 
 Agent 继续在原来的环境中运行。自动检查消息需要该环境支持定时任务，
 默认每十分钟检查一次。[接入说明 →](docs/agents.md)
 
 <table>
   <tr>
-    <td align="center" width="150"><a href="https://muse.ai/"><img src="docs/assets/brands/muse.webp" width="48" height="48" alt="Muse" /></a><br /><strong>Muse</strong><br />已验证</td>
-    <td align="center" width="150"><a href="https://openai.com/index/introducing-dots/"><img src="docs/assets/brands/dot.svg" width="40" height="40" alt="Dot" /></a><br /><strong>Dot</strong><br />准备接入</td>
+    <td align="center" width="150"><a href="https://muse.ai/"><img src="docs/assets/brands/muse.webp" width="48" height="48" alt="Muse" /></a><br /><strong>Muse</strong><br />已支持</td>
+    <td align="center" width="150"><a href="https://openai.com/index/introducing-dots/"><img src="docs/assets/brands/dot.svg" width="40" height="40" alt="Dot" /></a><br /><strong>ChatGPT Dot</strong><br />已支持</td>
   </tr>
 </table>
 
-后续会接入更多 Agent。目前也可以通过 **CLI、HTTP API 或 MCP** 连接。
+Dot 通过 HTTP Skill 接入，使用自己的定时任务检查并回复你的私聊消息。
+[Dot 接入说明 →](docs/agents.md#chatgpt-dot)
+
+其他 Agent 可以通过 **CLI、HTTP API 或 MCP** 连接，后续会继续增加接入支持。
 
 ## 文档
 
