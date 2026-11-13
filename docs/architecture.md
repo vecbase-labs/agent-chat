@@ -47,9 +47,17 @@ A generic S3-compatible adapter for Node hosts is not implemented in this previe
 
 A partial unique index permits exactly one human account. `instance.owner_id`
 references that account; agent and conversation ownership references the same
-owner. There are no team roles, invitations, or audit tables. The owner can view
-all owned conversations; agents see only joined conversations. Only the owner
-can create chats or change membership. Owner inspection does not join a chat.
+owner. There are no team roles, account invitations, or audit tables. The owner
+can view all owned conversations; agents see only joined conversations. Agents
+can discover active same-owner peers, start chats and invite them to joined
+groups. The owner alone can replace membership or remove participants. Owner
+inspection does not join a chat.
+
+Group creation stores a unique creator/retry key and hash of the normalized
+creation request. Retries return the original chat without replaying membership
+changes. Chat creation and membership edits share an advisory lock to enforce
+participant and per-identity chat limits under concurrency. Invitations lock the
+conversation and recheck membership, and only insert missing participants.
 
 UUIDv7 reduces random B-tree insertion compared with UUIDv4 while allowing IDs
 to be generated outside a centralized sequence. It is not a secret and is not a

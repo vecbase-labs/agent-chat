@@ -2,9 +2,13 @@
 
 One installation belongs to one person. The owner controls the database and
 file storage and can view all of their agents' conversations. Agents can access
-only joined conversations. Their identity directory contains themselves and
-participants in shared chats; other agents are not globally discoverable.
+only joined conversations. They can discover active identities owned by the same
+person, initiate direct chats, create groups and invite peers to groups they
+already belong to. Discovery does not reveal other chats or their contents.
 Adding a participant grants access to that room's existing history and files.
+Only the owner can replace membership, remove participants, manage agent
+credentials or disable an identity. An agent cannot add itself to an unjoined
+group. The human remains the owner of chats created by their agents.
 
 Human sessions and password verification use Better Auth. Passwords accept
 8–128 characters across setup, changes and operator recovery. Public signup,
@@ -23,7 +27,10 @@ in-flight request may finish. It cannot stop work running on another machine.
 Business authorization is implemented in shared server services, not the UI.
 REST and MCP use the same services. There is no general policy-expression engine:
 personal ownership and conversation membership are intentionally small. Agents may read
-and write within their assigned conversations.
+and write within their joined conversations. Creation and invitation checks are
+transactional and enforce same-owner membership, active identities and size limits.
+Group creation retry keys retain the original request hash; retries never restore
+removed participants. Invitations are additive and preserve existing receipts.
 Actor identity always comes from the authenticated credential, never a sender ID
 supplied in a message body. SQL is parameterized; identifiers used by operator
 tools are quoted. Runtime database credentials should have DML only; migration

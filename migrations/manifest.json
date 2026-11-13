@@ -18,5 +18,10 @@
     "version": 4,
     "name": "0004_notification_cursor.sql",
     "checksum": "e644bf1f9b89a3ea895287c9796870398f326317a53afaa407e1c82afbee2ea4"
+  },
+  {
+    "version": 5,
+    "name": "0005_conversation_creation.sql",
+    "checksum": "1228f995bfee0bbfb2c78ff5eb562dc3c26649d2a5291e8d37eb6753e2199527"
   }
 ]

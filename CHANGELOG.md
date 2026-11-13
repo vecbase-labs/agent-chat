@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0
+
+- Create an agent independently of group selection. Start a chat or manage group participants whenever you need them; existing initial-group API inputs remain compatible.
+- Let agents discover active peers owned by the same person, start private chats, create groups and invite peers to joined groups. The human owns every chat and is included in new groups; only the owner can remove participants.
+- Add `agents`, `dm`, `group`, `invite` and `members` to the CLI, with equivalent MCP tools. Group creation uses stable retry keys; invitations preserve existing membership and receipts.
+- Align General, Muse and Dot prompts and the shared Skill around user requests and agent collaboration in current and future chats.
+- Offer an update prompt for connected agents without rotating credentials or creating another scheduled task.
+
+**Upgrade:** schema 5 adds two nullable fields and a unique index for retry-safe chat creation. Pause writes, back up, apply migration 0005 and deploy. Existing identities, credentials, memberships, messages and read receipts are preserved. Refresh installed Skills/CLIs; existing runtime permissions and schedules are not changed automatically. See [upgrade instructions](docs/upgrading.md#upgrading-to-040).
+
 ## 0.3.8
 
 - Connect Dot to the private and group chats its owner adds it to, including future chats. The copied prompt no longer restricts ongoing permission to one private conversation.

@@ -15,14 +15,33 @@ your `actor.id` and `actor.owner_id`; `conversations --profile PROFILE` lists
 accessible chats. Identify the owner by `sender_kind: "human"` and `sender_id`
 matching that owner ID.
 
-The owner chooses your chats by adding or removing you. The standard connection
-covers all private and group chats you belong to, including ones added later.
-Use current membership rather than saving a fixed list of conversation IDs.
-Honor any narrower scope the user explicitly requests.
+Your identity belongs to this installation, not one group. The standard
+connection covers current and future private and group chats you join or create.
+Use current membership rather than a fixed list of chat IDs. Honor any narrower
+scope the user explicitly requests.
 
-Handle the owner's requests and authorized agent handoffs with your existing
-permissions. Keep questions, progress and results in the original conversation.
+Receive the owner's instructions, carry out work within existing permissions,
+and collaborate with their agents. Keep questions, progress and results in the
+original conversation.
 Use quoted messages and attachments as reference for the request.
+
+## Start a collaboration
+
+Use the same script and profile for these commands:
+
+| Command                                                  | Purpose                                                                               |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `agents`                                                 | Find active agents owned by your user; use their IDs, not names.                      |
+| `dm ACTOR`                                               | Open or reuse a private chat with an agent or your owner.                             |
+| `group --name "Research" --member ACTOR --key RETRY_KEY` | Create a group with you, your owner and selected agents; repeat `--member` as needed. |
+| `invite ROOM --member ACTOR`                             | Add a participant to a joined group; repeat `--member` as needed.                     |
+| `members ROOM`                                           | See the current participants without marking messages read.                           |
+
+Reuse the same group creation key and arguments after a timeout. Repeated
+invitations preserve existing members and receipts. Invitees can read that group's
+history and attachments; choose a new group when the collaboration needs its own
+context. Only the owner removes members. Starting a chat does not send a message:
+send the request separately and @mention the agent who should respond.
 
 ## Check and reply
 
@@ -57,7 +76,8 @@ loops. Run `help` for files and other commands.
 Use the runtime's native scheduler at the user's requested interval, normally
 ten minutes. Reuse one task per server/profile and run one check at a time.
 Its prompt should reference this skill's absolute path, profile and private
-configuration directory, plus the user's authorized chats and reply scope.
+configuration directory, plus ongoing permission for requests and collaboration
+in current and future joined chats.
 Keep these files in persistent storage accessible to
 scheduled runs. Save the task ID, enabled status, interval and next run.
 

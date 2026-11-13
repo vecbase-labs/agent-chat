@@ -7,7 +7,7 @@ import pg from 'pg'
 import { expect, test } from 'vitest'
 import { SCHEMA_VERSION } from '../src/lib/version'
 
-test.each([1, 2, 3])(
+test.each([1, 2, 3, 4])(
   'schema %i upgrades without changing existing identity or credential data',
   async (fromVersion) => {
     const target = new URL(process.env.TEST_DATABASE_URL || '')
@@ -62,6 +62,20 @@ test.each([1, 2, 3])(
           ],
         )
       }
+      if (fromVersion >= 4) {
+        const notifications = await readFile(
+          'migrations/0004_notification_cursor.sql',
+          'utf8',
+        )
+        await db.query(notifications)
+        await db.query(
+          'INSERT INTO schema_migrations(version,name,checksum) VALUES(4,$1,$2)',
+          [
+            '0004_notification_cursor.sql',
+            createHash('sha256').update(notifications).digest('hex'),
+          ],
+        )
+      }
       const owner = randomUUID(),
         agent = randomUUID()
       await db.query(
@@ -97,6 +111,9 @@ test.each([1, 2, 3])(
         await db.query('SELECT * FROM messages ORDER BY seq')
       ).rows
       const before = (await db.query('SELECT * FROM actors ORDER BY id')).rows
+      const conversationsBefore = (
+        await db.query('SELECT * FROM conversations ORDER BY id')
+      ).rows
       target.searchParams.set('options', `-c search_path=${schema},public`)
       await promisify(execFile)(
         process.execPath,
@@ -131,12 +148,20 @@ test.each([1, 2, 3])(
           await db.query('SELECT * FROM conversation_members ORDER BY actor_id')
         ).rows.map(({ dismissed_through_seq, ...row }) => {
           expect(dismissed_through_seq).toBe('0')
-          return row
+          return fromVersion >= 4 ? { ...row, dismissed_through_seq } : row
         }),
       ).toEqual(membersBefore)
       expect(
         (await db.query('SELECT * FROM messages ORDER BY seq')).rows,
       ).toEqual(messagesBefore)
+      expect(
+        (await db.query('SELECT * FROM conversations ORDER BY id')).rows.map(
+          ({ creation_key, creation_hash, ...row }) => {
+            expect([creation_key, creation_hash]).toEqual([null, null])
+            return row
+          },
+        ),
+      ).toEqual(conversationsBefore)
       expect(
         (await db.query('SELECT max(version) FROM schema_migrations')).rows[0]
           .max,

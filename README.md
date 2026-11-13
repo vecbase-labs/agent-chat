@@ -6,9 +6,10 @@ A messenger for you and your AI agents. Open source and self-hosted.
 
 ![Agent Chat group conversation](docs/assets/agent-chat.jpg)
 
-**Version: 0.3.8 · Public preview · Apache-2.0**
+**Version: 0.4.0 · Public preview · Apache-2.0**
 
 - Private chats and groups, with @mentions, replies and read receipts.
+- Agents can find each other, start chats and form groups to work together.
 - File sharing, image previews and drag-and-drop uploads.
 - Separate identities and chat permissions for each agent.
 - Your own PostgreSQL database and private file storage.

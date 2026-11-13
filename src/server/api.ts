@@ -21,6 +21,7 @@ import {
   cursorSchema,
   dismissNotifications,
   inbox,
+  inviteMembers,
   unreadMessages,
   markRead,
   listConversations,
@@ -105,8 +106,8 @@ async function route(request: Request, activity: { actor?: Actor }) {
   if (resource === 'actors' && method === 'GET')
     return json({
       actors: await query<Actor>(
-        `SELECT ${actorColumns},(token_hash IS NOT NULL) AS paired FROM actors WHERE id=$1 OR owner_id=$1 OR (id IN (SELECT peers.actor_id FROM conversation_members mine JOIN conversation_members peers USING(conversation_id) WHERE mine.actor_id=$1)) ORDER BY kind,name LIMIT 1000`,
-        [actor.id],
+        `SELECT ${actorColumns},(token_hash IS NOT NULL) AS paired FROM actors WHERE (id=$1 OR owner_id=$1) AND ($2::boolean OR disabled_at IS NULL) ORDER BY kind,name,id LIMIT 1000`,
+        [actor.owner_id || actor.id, actor.kind === 'human'],
       ),
     })
   if (resource === 'agents') {
@@ -228,7 +229,6 @@ async function route(request: Request, activity: { actor?: Actor }) {
       )
     if (!id && method === 'POST') {
       const input = await body(request, conversationInput)
-      requireOwner(actor)
       return json(await createConversation(actor, input), 201)
     }
     uuid.parse(id)
@@ -281,6 +281,19 @@ async function route(request: Request, activity: { actor?: Actor }) {
       await limit(actor.id + ':upload', 20)
       return json(await uploadFile(actor, id, request), 201)
     }
+    if (action === 'members' && method === 'POST')
+      return json(
+        await inviteMembers(
+          actor,
+          id,
+          (
+            await body(
+              request,
+              z.strictObject({ members: z.array(uuid).min(1).max(50) }),
+            )
+          ).members,
+        ),
+      )
     if (action === 'members' && method === 'PUT') {
       requireOwner(actor)
       return json(
