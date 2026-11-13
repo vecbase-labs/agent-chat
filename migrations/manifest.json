@@ -13,5 +13,10 @@
     "version": 3,
     "name": "0003_agent_avatars.sql",
     "checksum": "85e02ee844eac7160a92f9422232591ad6f830a33463f1887b9efbf9e4e9f0ee"
+  },
+  {
+    "version": 4,
+    "name": "0004_notification_cursor.sql",
+    "checksum": "e644bf1f9b89a3ea895287c9796870398f326317a53afaa407e1c82afbee2ea4"
   }
 ]

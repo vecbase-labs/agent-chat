@@ -67,6 +67,8 @@ export function ChatWindow({
   const firstScroll = useRef(true)
   const [awayFromBottom, setAwayFromBottom] = useState(false)
   const receivedIds = useRef(new Set<string>())
+  const dismissedThrough = useRef('0')
+  const dismissing = useRef(false)
   const [draft, setDraft] = useState<MentionDraft>({ text: '', mentions: [] })
   const [reply, setReply] = useState<Message | null>(null)
   const [files, setFiles] = useState<Attachment[]>([])
@@ -128,14 +130,51 @@ export function ChatWindow({
       .map((element) => element.dataset.messageId!)
       .filter((id) => !receivedIds.current.has(id))
       .slice(0, 100)
-    if (!ids.length) return
-    ids.forEach((id) => receivedIds.current.add(id))
-    void post(`conversations/${room.id}/read`, { messageIds: ids })
-      .then(onChanged)
-      .catch(() => {
-        ids.forEach((id) => receivedIds.current.delete(id))
+    if (ids.length) {
+      ids.forEach((id) => receivedIds.current.add(id))
+      void post(`conversations/${room.id}/read`, { messageIds: ids })
+        .then(onChanged)
+        .catch(() => {
+          ids.forEach((id) => receivedIds.current.delete(id))
+        })
+    }
+
+    const tail = messages.data?.messages.at(-1)
+    if (
+      actor.kind !== 'human' ||
+      !tail ||
+      tail.seq !== messages.data?.latest ||
+      BigInt(tail.seq) <= BigInt(dismissedThrough.current) ||
+      dismissing.current ||
+      container.clientHeight === 0 ||
+      container.scrollHeight - container.scrollTop - container.clientHeight > 4
+    )
+      return
+    const tailElement = container.querySelector<HTMLElement>(
+      `[data-message-id="${tail.id}"]`,
+    )
+    const tailBounds = tailElement?.getBoundingClientRect()
+    if (
+      !tailBounds ||
+      tailBounds.bottom <= bounds.top ||
+      tailBounds.bottom > bounds.bottom
+    )
+      return
+    dismissing.current = true
+    void post(`conversations/${room.id}/dismiss-notifications`, {
+      messageId: tail.id,
+    })
+      .then(() => {
+        dismissedThrough.current = tail.seq
+        onChanged()
       })
-  }, [active, room.id, room.joined, onChanged])
+      .catch(() => {
+        // The next message refresh or scroll retries a failed dismissal.
+      })
+      .finally(() => {
+        dismissing.current = false
+      })
+  }, [active, actor.kind, room.id, room.joined, messages.data, onChanged])
   useEffect(() => {
     if (!active) return
     if (sticky.current && latest) {
@@ -148,8 +187,10 @@ export function ChatWindow({
       })
       firstScroll.current = false
     }
+  }, [active, latest])
+  useEffect(() => {
     acknowledgeVisible()
-  }, [active, latest, acknowledgeVisible])
+  }, [acknowledgeVisible])
   useEffect(() => {
     const observer = new IntersectionObserver(() => acknowledgeVisible(), {
       root: scroll.current,

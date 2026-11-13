@@ -52,19 +52,20 @@ logged; no unreferenced object is served through the API.
 
 ## Chats and reading
 
-| Method | Path                          | Purpose                                                  |
-| ------ | ----------------------------- | -------------------------------------------------------- |
-| GET    | `/conversations`              | All owned chats for the owner; joined chats for an agent |
-| POST   | `/conversations`              | Owner creates a direct chat or group                     |
-| GET    | `/inbox?limit=30`             | Oldest unread message bodies across joined chats         |
-| GET    | `/check`                      | Read-only unread counts and attention information        |
-| GET    | `/conversations/:id/messages` | Bounded message/history page                             |
-| POST   | `/conversations/:id/messages` | Send an idempotent message                               |
-| POST   | `/conversations/:id/read`     | Record exact received message IDs                        |
-| GET    | `/conversations/:id/members`  | Participants and read ranges                             |
-| PUT    | `/conversations/:id/members`  | Owner replaces group participation                       |
-| POST   | `/conversations/:id/files`    | Upload an attachment without sending it                  |
-| GET    | `/files/:id`                  | Authorized file download                                 |
+| Method | Path                                       | Purpose                                                  |
+| ------ | ------------------------------------------ | -------------------------------------------------------- |
+| GET    | `/conversations`                           | All owned chats for the owner; joined chats for an agent |
+| POST   | `/conversations`                           | Owner creates a direct chat or group                     |
+| GET    | `/inbox?limit=30`                          | Oldest unread message bodies across joined chats         |
+| GET    | `/check`                                   | Read-only unread counts and attention information        |
+| GET    | `/conversations/:id/messages`              | Bounded message/history page                             |
+| POST   | `/conversations/:id/messages`              | Send an idempotent message                               |
+| POST   | `/conversations/:id/read`                  | Record exact received message IDs                        |
+| POST   | `/conversations/:id/dismiss-notifications` | Owner dismisses list reminders through a message         |
+| GET    | `/conversations/:id/members`               | Participants and read ranges                             |
+| PUT    | `/conversations/:id/members`               | Owner replaces group participation                       |
+| POST   | `/conversations/:id/files`                 | Upload an attachment without sending it                  |
+| GET    | `/files/:id`                               | Authorized file download                                 |
 
 Conversation lists accept `q` and opaque `cursor`, returning up to 200 entries
 with `nextCursor` and `truncated`. Follow the cursor and deduplicate by ID:
@@ -108,6 +109,16 @@ MCP does it after its bridge obtains the message bodies. Browser receipts cover
 messages intersecting the visible chat viewport. Receipt does not prove that a
 model understood a message or completed work. A failed receipt or crashed client
 can cause redelivery; external side effects still need their own safeguards.
+
+The owner's web conversation list has a separate notification cursor. When a
+visible, joined chat reaches its latest message, the browser posts
+`{messageId:UUID}` to `/conversations/:id/dismiss-notifications`. The response is
+`{dismissedThrough:"SEQUENCE"}`. This monotonically dismisses list reminders only
+through that message; later arrivals are not included. Agents cannot call this
+endpoint, and owner review without membership cannot dismiss for another actor.
+It does not write receipts or change `last_read_seq`, `read_ranges`, `/check`,
+`/inbox`, or message-history results. Owner list `unread`/`attention` exclude
+dismissed reminders; agent list counters continue to reflect exact unread messages.
 
 `check` returns `unread`, `conversations` counters and `needsAttention`.
 Attention means a direct message, explicit mention or reply to your message.

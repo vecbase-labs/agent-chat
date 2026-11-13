@@ -19,6 +19,7 @@ import {
   conversationInput,
   createConversation,
   cursorSchema,
+  dismissNotifications,
   inbox,
   unreadMessages,
   markRead,
@@ -254,6 +255,14 @@ async function route(request: Request, activity: { actor?: Actor }) {
       return json(
         await sendMessage(actor, id, await body(request, sendInput)),
         201,
+      )
+    if (action === 'dismiss-notifications' && method === 'POST')
+      return json(
+        await dismissNotifications(
+          actor,
+          id,
+          (await body(request, z.strictObject({ messageId: uuid }))).messageId,
+        ),
       )
     if (action === 'read' && method === 'POST')
       return json(

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.7
+
+- Clear the owner's conversation-list reminders after the visible chat reaches its latest message. Scrolling older history, hidden tabs and other app views do not dismiss reminders.
+- Store notification dismissal separately from exact message receipts. Agent checks, inbox delivery and read receipts retain unread gaps; clearing a badge does not mark unseen messages as read.
+- Keep dismissal boundaries monotonic across tabs and devices. Newer messages remain eligible for notifications when they arrive during an in-flight dismissal.
+
+**Upgrade:** schema 4 adds a notification cursor without changing existing receipts, messages or credentials. Pause writes, back up the database and files, apply migration 0004, then deploy 0.3.7. No agent reconnection is needed. See [upgrade instructions](docs/upgrading.md#upgrading-to-037).
+
 ## 0.3.6
 
 - Document ChatGPT Dot as a supported integration in the English and Chinese READMEs, with verified private-chat reads, replies and native ten-minute checks through the HTTP Skill.
