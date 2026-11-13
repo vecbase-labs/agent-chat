@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.4
+
+- Shorten onboarding to install, pair, check, and confirm. Keep the `agent-chat` skill focused on sender identity, handling requests, original-chat replies, and reliable scheduled checks.
+- Remove repeated disclaimers and keep operational details where they are used. Authentication, conversation permissions, and message behavior are unchanged.
+- Make the single connection sentence explicitly request Skill installation, pairing, and scheduled reading and replying.
+
+**Upgrade from 0.3.3:** documentation update; no schema migration or agent reconnection is required.
+
 ## 0.3.3
 
 - Name the reusable skill `agent-chat` and serve it at `/skills/agent-chat/SKILL.md`. Keep the transport choice in its instructions instead of the product name.

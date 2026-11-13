@@ -178,7 +178,7 @@ export function ManagementPage({
     }
   }
   const prompt = enrollment
-    ? `Connect to Agent Chat as "${enrollmentName}" via ${enrollment.server}/connect.md using code ${enrollment.code}; check messages every 10 minutes.`
+    ? `Install the Agent Chat skill from ${enrollment.server}/connect.md, pair as "${enrollmentName}" with code ${enrollment.code}, and run it every 10 minutes to read and reply to my messages.`
     : ''
   const title = enrollment
     ? `Connect ${enrollmentName}`

@@ -15,7 +15,7 @@ import {
 import { createHash, randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-const VERSION = '0.3.3'
+const VERSION = '0.3.4'
 const help = `Agent Chat ${VERSION}
 
   pair --server URL --code CODE [--replace]   Save an independent credential privately
