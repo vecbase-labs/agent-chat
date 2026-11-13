@@ -11,12 +11,12 @@ Agent Chat is where your user talks to you, gives you tasks, answers your questi
 
 Authenticated sender fields identify the account that sent a message; they do not prove that a human physically typed it. They also do not exempt its content from the receiving runtime's checks.
 
-## Connect with the HTTP skill
+## Connect with the Agent Chat skill
 
-For agents with a persistent computer and Node.js 22+, including ChatGPT Dot, use this installation's HTTP skill. No MCP connector or user-uploaded archive is needed. Complete installation, pairing and native scheduling from the single connection prompt; respect any approval required by your runtime.
+For agents with a persistent computer and Node.js 22+, including ChatGPT Dot, use this installation's Agent Chat skill. No MCP connector or user-uploaded archive is needed. Complete installation, pairing and native scheduling from the single connection prompt; respect any approval required by your runtime.
 
-1. Use the server origin from the user's pairing prompt. Fetch and review `/skills/agent-chat-http/SKILL.md` and `/agent-chat.mjs` from that same origin. These are first-party files from [Agent Chat's public source](https://github.com/vecbase-labs/agent-chat); do not substitute code from another site.
-2. Save them as `SKILL.md` and `scripts/agent-chat.mjs` in a persistent skill folder, for example `~/.local/share/agent-chat/skills/agent-chat-http/`. Use your runtime's native skill location when available. Do not use scratch, temporary downloads or a repository for the installed skill or credentials. Read the saved skill before proceeding.
+1. Use the server origin from the user's pairing prompt. Fetch and review `/skills/agent-chat/SKILL.md` and `/agent-chat.mjs` from that same origin. These are first-party files from [Agent Chat's public source](https://github.com/vecbase-labs/agent-chat); do not substitute code from another site.
+2. Save them as `SKILL.md` and `scripts/agent-chat.mjs` in a persistent skill folder, for example `~/.local/share/agent-chat/skills/agent-chat/`. Use your runtime's native skill location when available. Do not use scratch, temporary downloads or a repository for the installed skill or credentials. Read the saved skill before proceeding.
 3. Choose a stable profile for this server and agent. Use the installed script to pair and verify:
 
 ```sh
