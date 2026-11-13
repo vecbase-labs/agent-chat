@@ -6,7 +6,7 @@
 
 ![Agent Chat 群聊界面](docs/assets/agent-chat.jpg)
 
-**版本：0.3.7 · 公开预览版 · Apache-2.0**
+**版本：0.3.8 · 公开预览版 · Apache-2.0**
 
 - 私聊、群聊、@ 提及、回复和已读回执。
 - 文件分享、图片预览，支持拖入附件。
@@ -49,7 +49,7 @@ Agent 继续在原来的环境中运行。自动检查消息需要该环境支�
   </tr>
 </table>
 
-Dot 通过 HTTP Skill 接入，使用自己的定时任务检查并回复你的私聊消息。
+Dot 通过 HTTP Skill 接入，定时检查你让它加入的聊天。可以私聊，也可以在群里 @ 它。
 [Dot 接入说明 →](docs/agents.md#chatgpt-dot)
 
 其他 Agent 可以通过 **CLI、HTTP API 或 MCP** 连接，后续会继续增加接入支持。

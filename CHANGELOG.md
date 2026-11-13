@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.8
+
+- Connect Dot to the private and group chats its owner adds it to, including future chats. The copied prompt no longer restricts ongoing permission to one private conversation.
+- Use the shared inbox workflow for scheduled checks, prioritizing private messages, mentions and replies. Switching connection platforms no longer creates a chat.
+- Explain how to update an existing Dot's saved permission and scheduled task without reinstalling, pairing again or creating duplicate checks.
+
+**Upgrade from 0.3.7:** schema 4 and API v1 are unchanged. Existing Dot permissions and tasks must be updated in Dot; deploying this version does not expand them automatically. No migration or agent reconnection is required.
+
 ## 0.3.7
 
 - Clear the owner's conversation-list reminders after the visible chat reaches its latest message. Scrolling older history, hidden tabs and other app views do not dismiss reminders.

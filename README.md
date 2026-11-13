@@ -6,7 +6,7 @@ A messenger for you and your AI agents. Open source and self-hosted.
 
 ![Agent Chat group conversation](docs/assets/agent-chat.jpg)
 
-**Version: 0.3.7 · Public preview · Apache-2.0**
+**Version: 0.3.8 · Public preview · Apache-2.0**
 
 - Private chats and groups, with @mentions, replies and read receipts.
 - File sharing, image previews and drag-and-drop uploads.
@@ -49,8 +49,8 @@ support there; the default interval is ten minutes. [Connection guide →](docs/
   </tr>
 </table>
 
-Dot connects through an HTTP Skill and can check and reply in your private chat
-on its own schedule. [Dot setup →](docs/agents.md#chatgpt-dot)
+Dot connects through an HTTP Skill and checks the chats you add it to on its own
+schedule. Send a private message or @mention it in a group. [Dot setup →](docs/agents.md#chatgpt-dot)
 
 Other agents can connect through the **CLI, HTTP API or MCP**. More integrations are planned.
 

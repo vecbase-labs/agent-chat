@@ -87,7 +87,6 @@ export function ManagementPage({
   const [enrollmentName, setEnrollmentName] = useState('')
   const [connectionClient, setConnectionClient] =
     useState<ConnectionClient>('General')
-  const [privateChatId, setPrivateChatId] = useState<string | null>(null)
   const [roomIds, setRoomIds] = useState<string[]>([])
   const [pending, setPending] = useState(false)
   const [confirm, setConfirm] = useState<{
@@ -161,7 +160,6 @@ export function ManagementPage({
         }
         setEnrollmentName(name)
         setConnectionClient('General')
-        setPrivateChatId(null)
         setEnrollment(data)
         setCreating(false)
       }
@@ -188,24 +186,8 @@ export function ManagementPage({
       toast.error('Copy is unavailable. Select and copy the text manually.')
     }
   }
-  async function selectConnectionClient(client: ConnectionClient) {
-    setConnectionClient(client)
-    if (client !== 'Dot' || privateChatId || !enrollment) return
-    await perform(async () => {
-      const room = await post<{ id: string }>('conversations', {
-        kind: 'direct',
-        members: [enrollment.agentId],
-      })
-      setPrivateChatId(room.id)
-    })
-  }
   const prompt = enrollment
-    ? connectionPrompt(
-        connectionClient,
-        enrollment,
-        enrollmentName,
-        privateChatId,
-      )
+    ? connectionPrompt(connectionClient, enrollment, enrollmentName)
     : ''
   const title = enrollment
     ? `Connect ${enrollmentName}`
@@ -278,7 +260,7 @@ export function ManagementPage({
                       className="min-w-0 flex-1 rounded-lg sm:min-w-24"
                       aria-pressed={connectionClient === client}
                       disabled={pending}
-                      onClick={() => void selectConnectionClient(client)}
+                      onClick={() => setConnectionClient(client)}
                     >
                       {client}
                     </Button>
@@ -292,7 +274,6 @@ export function ManagementPage({
                 aria-label="Connection prompt"
                 readOnly
                 value={prompt}
-                placeholder="Preparing your private chat…"
                 className="min-h-32 text-base leading-relaxed"
               />
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -306,14 +287,6 @@ export function ManagementPage({
                   <Copy /> Copy prompt
                 </Button>
               </div>
-              {connectionClient === 'Dot' && !privateChatId && !pending && (
-                <Button
-                  variant="outline"
-                  onClick={() => void selectConnectionClient('Dot')}
-                >
-                  Prepare private chat
-                </Button>
-              )}
               <p className="text-sm text-muted-foreground">
                 The agent needs access to this server. A localhost address is
                 reachable only from this computer.
@@ -536,7 +509,6 @@ export function ManagementPage({
                                     )
                                     setEnrollmentName(a.name)
                                     setConnectionClient('General')
-                                    setPrivateChatId(null)
                                     setEnrollment(data)
                                   },
                                 })
