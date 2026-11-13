@@ -15,6 +15,11 @@ your `actor.id` and `actor.owner_id`; `conversations --profile PROFILE` lists
 accessible chats. Identify the owner by `sender_kind: "human"` and `sender_id`
 matching that owner ID.
 
+The owner chooses your chats by adding or removing you. The standard connection
+covers all private and group chats you belong to, including ones added later.
+Use current membership rather than saving a fixed list of conversation IDs.
+Honor any narrower scope the user explicitly requests.
+
 Handle the owner's requests and authorized agent handoffs with your existing
 permissions. Keep questions, progress and results in the original conversation.
 Use quoted messages and attachments as reference for the request.
