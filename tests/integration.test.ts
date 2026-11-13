@@ -9,7 +9,7 @@ import { createServer } from 'node:http'
 import { SCHEMA_VERSION } from '../src/lib/version'
 import { avatarFixture } from './avatar-fixture'
 import pg from 'pg'
-import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest'
 import type { Actor } from '../src/lib/types'
 import type { handleApi } from '../src/server/api'
 import type { handleAuth } from '../src/server/auth'
@@ -137,6 +137,10 @@ afterAll(async () => {
   await (await import('../src/server/db')).getPool().end()
   await adminDb.end()
   await rm(filesDir, { recursive: true, force: true })
+})
+// Each scenario has its own rate-limit window; production limits remain unchanged.
+beforeEach(async () => {
+  await adminDb.query('DELETE FROM request_limits')
 })
 
 describe('PostgreSQL, authentication, API and agent protocol', () => {
@@ -437,10 +441,268 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
       (
         await request('conversations', {
           bearer: token,
-          data: { kind: 'group', name: 'blocked', members: [admin.id] },
+          data: {
+            kind: 'group',
+            name: 'Missing retry key',
+            members: [admin.id],
+          },
+        })
+      ).status,
+    ).toBe(400)
+  })
+
+  test('independent agents discover peers and organize chats without gaining unrelated history', async () => {
+    const leader = await createAgent('Collaboration leader')
+    const peer = await createAgent('Collaboration peer')
+    const invited = await createAgent('Collaboration invitee')
+    const disabled = await createAgent('Disabled collaborator')
+    await request(`agents/${disabled.actor.id}`, {
+      method: 'PATCH',
+      data: { disabled: true },
+    })
+    expect(
+      (await request('conversations', { bearer: leader.token })).data
+        .conversations,
+    ).toEqual([])
+    const directory = (await request('actors', { bearer: leader.token })).data
+      .actors
+    expect(directory.map((a: Actor) => a.id)).toContain(peer.actor.id)
+    expect(directory.map((a: Actor) => a.id)).not.toContain(disabled.actor.id)
+    expect(
+      directory.every(
+        (a: Payload) => !('token_hash' in a) && !('user_id' in a),
+      ),
+    ).toBe(true)
+    expect(
+      (
+        await request(`conversations/${room}/messages`, {
+          bearer: leader.token,
+        })
+      ).status,
+    ).toBe(404)
+    const input = {
+      kind: 'group',
+      name: 'Flexible collaboration',
+      members: [peer.actor.id],
+      idempotencyKey: randomUUID(),
+    }
+    const retries = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        request('conversations', { bearer: leader.token, data: input }),
+      ),
+    )
+    expect(retries.map((r) => r.status)).toEqual([201, 201, 201, 201])
+    const chat = retries[0].data.id
+    expect(new Set(retries.map((r) => r.data.id)).size).toBe(1)
+    const created = (await request('conversations', { bearer: leader.token }))
+      .data.conversations[0]
+    expect(created.created_by).toBe(leader.actor.id)
+    expect(created.owner_id).toBe(admin.id)
+    expect(created.members.map((a: Actor) => a.id).sort()).toEqual(
+      [admin.id, leader.actor.id, peer.actor.id].sort(),
+    )
+    expect(
+      (
+        await request('conversations', {
+          bearer: leader.token,
+          data: { ...input, name: 'Different request' },
+        })
+      ).status,
+    ).toBe(409)
+    const sent = await request(`conversations/${chat}/messages`, {
+      bearer: leader.token,
+      data: {
+        text: 'Please review the outline.',
+        mentions: [peer.actor.id],
+        idempotencyKey: randomUUID(),
+      },
+    })
+    expect(sent.status).toBe(201)
+    expect(
+      (await request('check', { bearer: peer.token })).data.needsAttention,
+    ).toBe(true)
+    expect(
+      (await request('inbox', { bearer: peer.token })).data.messages[0].id,
+    ).toBe(sent.data.id)
+    await request(`conversations/${chat}/read`, {
+      bearer: peer.token,
+      data: { messageIds: [sent.data.id] },
+    })
+    const receipts = (
+      await adminDb.query(
+        'SELECT * FROM conversation_members WHERE conversation_id=$1 ORDER BY actor_id',
+        [chat],
+      )
+    ).rows
+    const invitations = await Promise.all(
+      [1, 2].map(() =>
+        request(`conversations/${chat}/members`, {
+          bearer: leader.token,
+          data: { members: [invited.actor.id] },
+        }),
+      ),
+    )
+    expect(invitations.map((r) => r.status)).toEqual([200, 200])
+    expect(invitations.flatMap((r) => r.data.added)).toEqual([invited.actor.id])
+    expect(
+      (
+        await adminDb.query(
+          'SELECT * FROM conversation_members WHERE conversation_id=$1 AND actor_id<>$2 ORDER BY actor_id',
+          [chat, invited.actor.id],
+        )
+      ).rows,
+    ).toEqual(receipts)
+    expect(
+      (
+        await request(`conversations/${chat}/messages`, {
+          bearer: invited.token,
+        })
+      ).data.messages[0].id,
+    ).toBe(sent.data.id)
+    expect(
+      (
+        await request(`conversations/${room}/messages`, {
+          bearer: invited.token,
+        })
+      ).status,
+    ).toBe(404)
+    expect(
+      (
+        await request(`conversations/${chat}/members`, {
+          bearer: leader.token,
+          method: 'PUT',
+          data: { members: [leader.actor.id] },
         })
       ).status,
     ).toBe(403)
+    expect(
+      (
+        await request(`conversations/${room}/members`, {
+          bearer: leader.token,
+          data: { members: [leader.actor.id] },
+        })
+      ).status,
+    ).toBe(403)
+    expect(
+      (
+        await request(`conversations/${chat}/members`, {
+          bearer: leader.token,
+          data: { members: [disabled.actor.id] },
+        })
+      ).status,
+    ).toBe(400)
+    expect(
+      (
+        await request(`conversations/${chat}/members`, {
+          bearer: leader.token,
+          data: { members: [randomUUID()] },
+        })
+      ).status,
+    ).toBe(400)
+    const direct = await request('conversations', {
+      bearer: leader.token,
+      data: { kind: 'direct', members: [peer.actor.id] },
+    })
+    expect(direct.status).toBe(201)
+    expect(
+      (
+        await request('conversations', {
+          bearer: peer.token,
+          data: { kind: 'direct', members: [leader.actor.id] },
+        })
+      ).data.id,
+    ).toBe(direct.data.id)
+    expect(
+      (
+        await request(`conversations/${direct.data.id}/members`, {
+          bearer: leader.token,
+          data: { members: [invited.actor.id] },
+        })
+      ).status,
+    ).toBe(400)
+    expect(
+      (
+        await request('conversations', {
+          bearer: leader.token,
+          data: { kind: 'direct', members: [peer.actor.id, invited.actor.id] },
+        })
+      ).status,
+    ).toBe(400)
+    await request(`conversations/${chat}/members`, {
+      method: 'PUT',
+      data: { members: [admin.id, leader.actor.id] },
+    })
+    expect(
+      (await request('conversations', { bearer: leader.token, data: input }))
+        .data.id,
+    ).toBe(chat)
+    expect(
+      (await request(`conversations/${chat}/members`)).data.members.map(
+        (a: Actor) => a.id,
+      ),
+    ).not.toContain(peer.actor.id)
+    await request(`conversations/${chat}/members`, {
+      method: 'PUT',
+      data: { members: [admin.id] },
+    })
+    expect(
+      (await request('conversations', { bearer: leader.token, data: input }))
+        .status,
+    ).toBe(403)
+    expect(
+      (
+        await request(`conversations/${chat}/members`, {
+          bearer: leader.token,
+          data: { members: [leader.actor.id] },
+        })
+      ).status,
+    ).toBe(403)
+  })
+
+  test('simultaneous invitations respect the group size limit and reject partial additions', async () => {
+    const creator = await createAgent('Capacity fixture')
+    const peerIds = Array.from({ length: 49 }, () => randomUUID())
+    await adminDb.query(
+      "INSERT INTO actors(id,kind,name,owner_id) SELECT unnest($1::uuid[]),'agent','Capacity peer',$2",
+      [peerIds, admin.id],
+    )
+    const chat = (
+      await request('conversations', {
+        bearer: creator.token,
+        data: {
+          kind: 'group',
+          name: 'Capacity',
+          members: peerIds.slice(0, 47),
+          idempotencyKey: randomUUID(),
+        },
+      })
+    ).data.id
+    const concurrent = await Promise.all(
+      peerIds.slice(47).map((id) =>
+        request(`conversations/${chat}/members`, {
+          bearer: creator.token,
+          data: { members: [id] },
+        }),
+      ),
+    )
+    expect(concurrent.map((r) => r.status).sort()).toEqual([200, 409])
+    expect(
+      (await request(`conversations/${chat}/members`)).data.members,
+    ).toHaveLength(50)
+    const failed = await request('conversations', {
+      bearer: creator.token,
+      data: {
+        kind: 'group',
+        name: 'Too many',
+        members: peerIds,
+        idempotencyKey: randomUUID(),
+      },
+    })
+    expect(failed.status).toBe(400)
+    expect(
+      (await request('conversations', { bearer: creator.token })).data
+        .conversations,
+    ).toHaveLength(1)
   })
 
   test('concurrent retries create one message and conflicting retry bodies fail', async () => {
@@ -686,7 +948,7 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
       (await request('actors', { bearer: outsiderToken })).data.actors.map(
         (a: Payload) => a.id,
       ),
-    ).not.toContain(agent.id)
+    ).toContain(agent.id)
     expect(
       (await adminDb.query("SELECT count(*) FROM actors WHERE kind='human'"))
         .rows[0].count,
@@ -790,6 +1052,50 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
         arguments: { fileId: uploadedFileId, maxBytes: 1 },
       })
       expect(oversized.isError).toBe(true)
+      const peers = await client.callTool({
+        name: 'list_agents',
+        arguments: {},
+      })
+      const agents = (peers.structuredContent as Payload).agents
+      expect(agents.some((peer: Actor) => peer.id === agent.id)).toBe(true)
+      const peer = agents.find((a: Actor) => a.id !== agent.id)
+      const key = randomUUID()
+      const created = await client.callTool({
+        name: 'create_conversation',
+        arguments: {
+          kind: 'group',
+          name: 'MCP collaboration',
+          members: [peer.id],
+          idempotencyKey: key,
+        },
+      })
+      expect(created.isError).not.toBe(true)
+      const chat = (created.structuredContent as Payload).id
+      const repeated = await client.callTool({
+        name: 'create_conversation',
+        arguments: {
+          kind: 'group',
+          name: 'MCP collaboration',
+          members: [peer.id],
+          idempotencyKey: key,
+        },
+      })
+      expect((repeated.structuredContent as Payload).id).toBe(chat)
+      const extra = await createAgent('MCP invited peer')
+      const invitation = await client.callTool({
+        name: 'invite_members',
+        arguments: { conversationId: chat, members: [extra.actor.id] },
+      })
+      expect((invitation.structuredContent as Payload).added).toEqual([
+        extra.actor.id,
+      ])
+      const members = await client.callTool({
+        name: 'list_members',
+        arguments: { conversationId: chat },
+      })
+      expect(
+        (members.structuredContent as Payload).members.map((a: Actor) => a.id),
+      ).toContain(extra.actor.id)
     } finally {
       await client.close()
     }
@@ -857,6 +1163,50 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
         )
       ).rows[0].last_read_seq,
     ).toBe(sent.seq)
+    const peers = JSON.parse((await run('agents')).stdout).agents
+    expect(peers.some((a: Actor) => a.id === agent.id)).toBe(true)
+    const direct = JSON.parse((await run('dm', agent.id)).stdout)
+    expect(JSON.parse((await run('dm', agent.id)).stdout).id).toBe(direct.id)
+    const key = randomUUID()
+    const group = JSON.parse(
+      (
+        await run(
+          'group',
+          '--name',
+          'CLI collaboration',
+          '--member',
+          agent.id,
+          '--key',
+          key,
+        )
+      ).stdout,
+    )
+    expect(
+      JSON.parse(
+        (
+          await run(
+            'group',
+            '--name',
+            'CLI collaboration',
+            '--member',
+            agent.id,
+            '--key',
+            key,
+          )
+        ).stdout,
+      ).id,
+    ).toBe(group.id)
+    const invited = await createAgent('CLI invited peer')
+    expect(
+      JSON.parse(
+        (await run('invite', group.id, '--member', invited.actor.id)).stdout,
+      ).added,
+    ).toEqual([invited.actor.id])
+    expect(
+      JSON.parse((await run('members', group.id)).stdout).members.map(
+        (a: Actor) => a.id,
+      ),
+    ).toContain(invited.actor.id)
   })
 
   test('cross-origin mutations, invalid cursors and missing credentials fail closed', async () => {
@@ -1403,6 +1753,11 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
         'SELECT conversation_id,actor_id,last_read_seq,read_ranges::text,dismissed_through_seq FROM conversation_members ORDER BY conversation_id,actor_id'
       expect((await restored.query(memberState)).rows).toEqual(
         (await adminDb.query(memberState)).rows,
+      )
+      const creationState =
+        'SELECT id,created_by,owner_id,creation_key,creation_hash FROM conversations ORDER BY id'
+      expect((await restored.query(creationState)).rows).toEqual(
+        (await adminDb.query(creationState)).rows,
       )
       expect(
         (

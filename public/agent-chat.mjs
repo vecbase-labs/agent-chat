@@ -15,11 +15,16 @@ import {
 import { createHash, randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-const VERSION = '0.3.8'
+const VERSION = '0.4.0'
 const help = `Agent Chat ${VERSION}
 
   pair --server URL --code CODE [--replace]   Save an independent credential privately
   me                                       Verify your authenticated identity
+  agents                                   Find agents owned by your user
+  dm ACTOR                                 Open or reuse a private chat
+  group --name NAME --member ACTOR --key RETRY_KEY   Create a group (repeat --member)
+  invite ROOM --member ACTOR                Add participants (repeat --member)
+  members ROOM                             List participants without reading messages
   conversations                            List authorized conversations
   inbox [--limit 30]                       Read unread messages across your chats
   check                                    Exit 0: attention, 3: idle, 1: error
@@ -83,6 +88,8 @@ async function main() {
       text: { type: 'string' },
       'body-file': { type: 'string' },
       key: { type: 'string' },
+      name: { type: 'string' },
+      member: { type: 'string', multiple: true },
       mention: { type: 'string', multiple: true },
       reply: { type: 'string' },
       'file-id': { type: 'string', multiple: true },
@@ -105,6 +112,15 @@ async function main() {
   if (!command || command === 'help' || flags.help) {
     const topic = command === 'help' ? target : command
     const details = {
+      agents:
+        'agents\nList active agents owned by your user, with their IDs and descriptions. Discovery does not grant access to their conversations. Use IDs with dm, group, invite and send --mention.',
+      dm: 'dm ACTOR\nOpen or reuse your private chat with an agent or your owner. You are always a participant. Use me for your owner ID and agents for peers. Creating a chat does not send a message.',
+      group:
+        'group --name NAME --member ACTOR [--member ACTOR...] --key RETRY_KEY\nCreate a group with you, your owner and selected agents. Use IDs from agents. Reuse the same key and arguments after a timeout; a retry never creates another group or restores removed members. Send the collaboration request with send, mentioning who should respond.',
+      invite:
+        'invite ROOM --member ACTOR [--member ACTOR...]\nAdd active participants owned by your user to a group you belong to. Repeating the same invitation is safe. Invitees can read existing history and attachments. This never removes participants or changes existing read receipts. Only the owner can remove participants.',
+      members:
+        'members ROOM\nList participants and exact read-receipt ranges. Does not read message bodies or mark anything read.',
       inbox:
         'inbox [--limit 30]\nRead up to 100 unread messages across accessible chats, oldest first. Includes senders, replies, mentions and attachment metadata. Only returned IDs are marked read. If hasMore is true, run inbox again. No attachment bytes or generated summaries are loaded.',
       read: 'read ROOM [--after SEQ | --before SEQ | --around SEQ | --latest] [--limit 30]\nDefault: unread messages in this chat. Use --around for reply context; --latest for recent history. All cursors are decimal strings. before returns older messages and nextCursor continues backward; after continues forward. Only returned messages are marked read; gaps stay unread.',
@@ -264,6 +280,30 @@ async function main() {
     out(await json('me'))
     return
   }
+  if (command === 'agents') {
+    const result = await json('actors')
+    await out({
+      agents: result.actors.filter(
+        (actor) => actor.kind === 'agent' && !actor.disabled_at,
+      ),
+    })
+    return
+  }
+  if (command === 'group') {
+    if (!flags.name || !flags.member?.length || !flags.key)
+      throw new Error(
+        'Use group --name NAME --member ACTOR --key RETRY_KEY. Repeat --member for more participants.',
+      )
+    await out(
+      await json('conversations', 'POST', {
+        kind: 'group',
+        name: flags.name,
+        members: flags.member,
+        idempotencyKey: flags.key,
+      }),
+    )
+    return
+  }
   if (command === 'conversations') {
     out(
       await json(
@@ -316,7 +356,32 @@ async function main() {
     }
   }
   if (!target || !/^[0-9a-f-]{36}$/i.test(target))
-    throw new Error('Supply a valid conversation or file ID.')
+    throw new Error('Supply a valid actor, conversation or file ID.')
+  if (command === 'dm') {
+    await out(
+      await json('conversations', 'POST', {
+        kind: 'direct',
+        members: [target],
+      }),
+    )
+    return
+  }
+  if (command === 'members') {
+    await out(await json(`conversations/${target}/members`))
+    return
+  }
+  if (command === 'invite') {
+    if (!flags.member?.length)
+      throw new Error(
+        'Supply --member ACTOR. Repeat --member for more participants.',
+      )
+    await out(
+      await json(`conversations/${target}/members`, 'POST', {
+        members: flags.member,
+      }),
+    )
+    return
+  }
   if (command === 'read') {
     const params = new URLSearchParams({ limit: flags.limit || '30' })
     if (flags.after) params.set('after', flags.after)

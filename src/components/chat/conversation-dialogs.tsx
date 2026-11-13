@@ -32,6 +32,7 @@ export function NewConversation({
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [creationKey] = useState(() => crypto.randomUUID())
   const available = actors.filter(
     (a) =>
       a.id !== actor.id &&
@@ -67,6 +68,7 @@ export function NewConversation({
                 kind: group ? 'group' : 'direct',
                 name: group ? form.get('name') : undefined,
                 members,
+                idempotencyKey: group ? creationKey : undefined,
               })
               onCreated(result.id, agentPair)
             } catch (err) {

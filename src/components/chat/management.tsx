@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useInfiniteQuery } from '@tanstack/react-query'
 import {
   Copy,
   Plus,
@@ -12,6 +11,7 @@ import {
   Settings2,
   MessageCircle,
   Bot,
+  BookOpen,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '#/components/ui/button'
@@ -25,7 +25,6 @@ import {
 } from '#/components/ui/dropdown-menu'
 import { Label } from '#/components/ui/label'
 import { Textarea } from '#/components/ui/textarea'
-import { Checkbox } from '#/components/ui/checkbox'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,7 +49,7 @@ import { ChatAvatar } from './avatar'
 import { AvatarPicker } from './avatar-picker'
 import { AppearanceSettings } from './appearance'
 import { AgentActivity } from './agent-activity'
-import type { Actor, Conversation } from '#/lib/types'
+import type { Actor } from '#/lib/types'
 
 type Enrollment = {
   code: string
@@ -87,7 +86,6 @@ export function ManagementPage({
   const [enrollmentName, setEnrollmentName] = useState('')
   const [connectionClient, setConnectionClient] =
     useState<ConnectionClient>('General')
-  const [roomIds, setRoomIds] = useState<string[]>([])
   const [pending, setPending] = useState(false)
   const [confirm, setConfirm] = useState<{
     title: string
@@ -97,24 +95,6 @@ export function ManagementPage({
   const [error, setError] = useState('')
   const isOwner = actor.kind === 'human'
   const agentList = actors.filter((a) => a.kind === 'agent')
-  const groupPages = useInfiniteQuery({
-    queryKey: ['conversations', 'agent-groups'],
-    initialPageParam: '',
-    queryFn: ({ signal, pageParam }) =>
-      api<{ conversations: Conversation[]; nextCursor: string | null }>(
-        `conversations?${new URLSearchParams({ all: 'true', ...(pageParam ? { cursor: pageParam } : {}) })}`,
-        { signal },
-      ),
-    getNextPageParam: (page) => page.nextCursor || undefined,
-    enabled: isOwner && mode === 'agents' && creating && !selected,
-  })
-  const groups = [
-    ...new Map(
-      (groupPages.data?.pages.flatMap((page) => page.conversations) || [])
-        .filter((room) => room.kind === 'group')
-        .map((room) => [room.id, room]),
-    ).values(),
-  ]
   async function perform(fn: () => Promise<void>) {
     setPending(true)
     setError('')
@@ -149,7 +129,6 @@ export function ManagementPage({
         const data = await post<Enrollment>('agents', {
           name,
           description: form.get('description'),
-          conversations: roomIds,
         })
         try {
           await saveAvatar(data.agentId)
@@ -190,7 +169,7 @@ export function ManagementPage({
     ? connectionPrompt(connectionClient, enrollment, enrollmentName)
     : ''
   const title = enrollment
-    ? `Connect ${enrollmentName}`
+    ? `${enrollment.code ? 'Connect' : 'Update'} ${enrollmentName}`
     : creating
       ? selected
         ? 'Agent settings'
@@ -217,9 +196,9 @@ export function ManagementPage({
                 {enrollment
                   ? 'Copy this message into your agent’s current chat.'
                   : creating
-                    ? 'Give your agent a name and choose its groups.'
+                    ? 'Give your agent a name, then connect it.'
                     : mode === 'agents'
-                      ? 'Connect the agents you already use.'
+                      ? 'Connect your agents. Start a chat or add them to a group anytime.'
                       : 'Make yourself at home.'}
               </p>
             </div>
@@ -228,7 +207,6 @@ export function ManagementPage({
                 onClick={() => {
                   setCreating(true)
                   setSelected(null)
-                  setRoomIds([])
                   setAvatarDraft(undefined)
                   setDraftName('')
                 }}
@@ -278,7 +256,9 @@ export function ManagementPage({
               />
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-sm text-muted-foreground">
-                  Expires in 10 minutes · One use
+                  {enrollment.code
+                    ? 'Expires in 10 minutes · One use'
+                    : 'Keeps your existing connection'}
                 </span>
                 <Button
                   disabled={!prompt || pending}
@@ -328,63 +308,6 @@ export function ManagementPage({
                   placeholder="What does this agent help with?"
                 />
               </div>
-              {!selected && (
-                <div className="space-y-3">
-                  <Label>Add to groups</Label>
-                  {groupPages.isPending && (
-                    <p className="text-sm text-muted-foreground">
-                      Loading groups…
-                    </p>
-                  )}
-                  {groupPages.error && (
-                    <div role="alert" className="text-sm text-destructive">
-                      Could not load groups.
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => groupPages.refetch()}
-                      >
-                        Retry
-                      </Button>
-                    </div>
-                  )}
-                  {!groupPages.isPending &&
-                    !groupPages.error &&
-                    !groupPages.hasNextPage &&
-                    groups.length === 0 && (
-                      <p className="text-sm text-muted-foreground">
-                        Create a group afterwards to start a conversation.
-                      </p>
-                    )}
-                  {groups.map((c) => (
-                    <label key={c.id} className="flex items-center gap-3">
-                      <Checkbox
-                        checked={roomIds.includes(c.id)}
-                        onCheckedChange={(checked) =>
-                          setRoomIds(
-                            checked
-                              ? [...roomIds, c.id]
-                              : roomIds.filter((id) => id !== c.id),
-                          )
-                        }
-                      />
-                      {c.name}
-                    </label>
-                  ))}
-                  {groupPages.hasNextPage && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={groupPages.isFetchingNextPage}
-                      onClick={() => groupPages.fetchNextPage()}
-                    >
-                      Load more groups
-                    </Button>
-                  )}
-                </div>
-              )}
               <div className="flex justify-between">
                 <Button
                   type="button"
@@ -495,6 +418,22 @@ export function ManagementPage({
                             >
                               <Settings2 /> Agent settings
                             </DropdownMenuItem>
+                            {a.paired && !a.disabled_at && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  setEnrollmentName(a.name)
+                                  setConnectionClient('General')
+                                  setEnrollment({
+                                    agentId: a.id,
+                                    server: window.location.origin,
+                                    code: '',
+                                    expiresIn: 0,
+                                  })
+                                }}
+                              >
+                                <BookOpen /> Update instructions
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               onSelect={() =>
                                 setConfirm({

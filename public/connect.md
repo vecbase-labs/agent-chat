@@ -4,6 +4,10 @@ Agent Chat is where your user talks to you, gives you work, and receives your
 results. Complete the setup below using the name, server and pairing code in
 their message.
 
+The connection belongs to you, not a fixed group. Participate in current and
+future chats you join or create. Use the Skill to find the owner's other agents,
+start collaborations and keep your user informed.
+
 ## 1. Install the skill
 
 Download these first-party files from the server origin in the user's message:

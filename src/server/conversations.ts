@@ -355,6 +355,7 @@ export const conversationInput = z.object({
   kind: z.enum(['direct', 'group']),
   name: z.string().trim().min(1).max(100).optional(),
   members: z.array(uuid).min(1).max(50),
+  idempotencyKey: z.string().min(8).max(100).optional(),
 })
 export async function createConversation(
   actor: Actor,
@@ -362,13 +363,27 @@ export async function createConversation(
 ) {
   // The owner can create a direct conversation between two other
   // identities without becoming a participant. Review does not join the conversation.
-  requireOwner(actor)
+  const ownerId = actor.owner_id || actor.id
+  if (actor.kind === 'agent' && input.kind === 'group' && !input.idempotencyKey)
+    fail(
+      400,
+      'RETRY_KEY_REQUIRED',
+      'Use an idempotencyKey when creating a group.',
+    )
   const explicitPair =
     actor.kind === 'human' &&
     input.kind === 'direct' &&
     input.members.length === 2
   const members = [
-    ...new Set(explicitPair ? input.members : [actor.id, ...input.members]),
+    ...new Set(
+      explicitPair
+        ? input.members
+        : [
+            actor.id,
+            ...input.members,
+            ...(input.kind === 'group' ? [ownerId] : []),
+          ],
+    ),
   ].sort()
   if (members.length > 50)
     fail(400, 'LIMIT_REACHED', 'A conversation supports up to 50 participants.')
@@ -382,9 +397,36 @@ export async function createConversation(
     fail(400, 'NAME_REQUIRED', 'Give this group a name.')
   return transaction(async (client) => {
     await client.query('SELECT pg_advisory_xact_lock(81724003)')
+    const requestHash = hash(
+      JSON.stringify({
+        kind: input.kind,
+        name: input.kind === 'group' ? input.name : 'Direct message',
+        members,
+      }),
+    )
+    if (input.idempotencyKey) {
+      const previous = await client.query<{
+        id: string
+        creation_hash: string
+      }>(
+        'SELECT id,creation_hash FROM conversations WHERE created_by=$1 AND creation_key=$2 AND owner_id=$3',
+        [actor.id, input.idempotencyKey, ownerId],
+      )
+      if (previous.rows[0]) {
+        if (previous.rows[0].creation_hash !== requestHash)
+          fail(
+            409,
+            'IDEMPOTENCY_CONFLICT',
+            'This retry key belongs to a different conversation request.',
+          )
+        if (actor.kind === 'agent')
+          await lockWriter(client, actor, previous.rows[0].id)
+        return { id: previous.rows[0].id }
+      }
+    }
     const existingActors = await client.query(
-      'SELECT id FROM actors WHERE id=ANY($1::uuid[]) AND disabled_at IS NULL AND (id=$2 OR owner_id=$2)',
-      [members, actor.id],
+      'SELECT id FROM actors WHERE id=ANY($1::uuid[]) AND disabled_at IS NULL AND (id=$2 OR owner_id=$2) ORDER BY id FOR SHARE',
+      [members, ownerId],
     )
     if (existingActors.rowCount !== members.length)
       fail(400, 'INVALID_MEMBERS', 'One or more members are unavailable.')
@@ -411,8 +453,17 @@ export async function createConversation(
       )
     const id = newId()
     await client.query(
-      'INSERT INTO conversations(id,kind,name,created_by,direct_key,owner_id) VALUES($1,$2,$3,$4,$5,$4)',
-      [id, input.kind, input.name || 'Direct message', actor.id, key],
+      'INSERT INTO conversations(id,kind,name,created_by,direct_key,owner_id,creation_key,creation_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+      [
+        id,
+        input.kind,
+        input.kind === 'group' ? input.name : 'Direct message',
+        actor.id,
+        key,
+        ownerId,
+        input.idempotencyKey || null,
+        input.idempotencyKey ? requestHash : null,
+      ],
     )
     await client.query(
       'INSERT INTO conversation_members(conversation_id,actor_id) SELECT $1,unnest($2::uuid[])',
@@ -429,6 +480,7 @@ export async function updateMembers(
 ) {
   requireOwner(actor)
   return transaction(async (client) => {
+    await client.query('SELECT pg_advisory_xact_lock(81724003)')
     const room = await client.query<{ kind: string; created_by: string }>(
       'SELECT kind,created_by FROM conversations WHERE id=$1 AND owner_id=$2 FOR UPDATE',
       [id, actor.id],
@@ -470,6 +522,69 @@ export async function updateMembers(
       [id, unique],
     )
     return { updated: true }
+  })
+}
+
+/** Add participants without replacing membership or resetting existing receipts. */
+export async function inviteMembers(
+  actor: Actor,
+  id: string,
+  members: string[],
+) {
+  const ownerId = actor.owner_id || actor.id
+  return transaction(async (client) => {
+    await client.query('SELECT pg_advisory_xact_lock(81724003)')
+    if (actor.kind === 'agent') await lockWriter(client, actor, id)
+    const room = await client.query<{ kind: string }>(
+      'SELECT kind FROM conversations WHERE id=$1 AND owner_id=$2 FOR UPDATE',
+      [id, ownerId],
+    )
+    if (!room.rows[0]) fail(404, 'NOT_FOUND', 'Conversation not found.')
+    if (room.rows[0].kind !== 'group')
+      fail(
+        400,
+        'DIRECT_MEMBERS_FIXED',
+        'Invite participants to a group, not a direct conversation.',
+      )
+    const unique = [...new Set(members)].sort()
+    const available = await client.query(
+      'SELECT id FROM actors WHERE id=ANY($1::uuid[]) AND disabled_at IS NULL AND (id=$2 OR owner_id=$2) ORDER BY id FOR SHARE',
+      [unique, ownerId],
+    )
+    if (available.rowCount !== unique.length)
+      fail(400, 'INVALID_MEMBERS', 'One or more participants are unavailable.')
+    const current = await client.query<{ actor_id: string }>(
+      'SELECT actor_id FROM conversation_members WHERE conversation_id=$1',
+      [id],
+    )
+    const existing = new Set(current.rows.map((m) => m.actor_id))
+    const added = unique.filter((member) => !existing.has(member))
+    if (existing.size + added.length > 50)
+      fail(
+        409,
+        'LIMIT_REACHED',
+        'A conversation supports up to 50 participants.',
+      )
+    if (added.length) {
+      if (
+        (
+          await client.query(
+            'SELECT actor_id FROM conversation_members WHERE actor_id=ANY($1::uuid[]) GROUP BY actor_id HAVING count(*)>=200',
+            [added],
+          )
+        ).rowCount
+      )
+        fail(
+          409,
+          'LIMIT_REACHED',
+          'An identity can join up to 200 conversations in this release.',
+        )
+      await client.query(
+        'INSERT INTO conversation_members(conversation_id,actor_id) SELECT $1,unnest($2::uuid[]) ON CONFLICT DO NOTHING',
+        [id, added],
+      )
+    }
+    return { added }
   })
 }
 

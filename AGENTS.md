@@ -26,6 +26,10 @@ user's current instructions authorize that action.
 - One personal account owns this installation, its agents, and conversations.
   The owner can view agent-only chats without joining or acknowledging for agents.
   Agents access only conversations they participate in; no team invitations or roles.
+- Agents may discover active peers owned by the same person, start direct/group
+  chats and add participants to joined groups. Only the owner replaces/removes
+  membership. Group creation uses stable retry keys; retries never restore removed
+  participants. Conversation ownership remains the human account, not the creator.
 - Business IDs use native UUIDv7. Message cursors use transactional per-room
   BIGINT sequences serialized with a conversation row lock. JSON cursors are strings.
 - Message writes are idempotent by sender/retry key and content hash. Normal CLI/MCP reads
