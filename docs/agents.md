@@ -2,8 +2,9 @@
 
 In the left icon rail, open **Agents → New agent**. Give it a name, select any
 existing groups, and copy the generated prompt into that agent's current chat.
-The prompt links to this installation's `/connect.md` and includes a one-use code
-that expires after ten minutes. It grants only that agent's selected access.
+The prompt links to this installation's `/connect.md`, includes a one-use code
+that expires after ten minutes, and explicitly requests ten-minute message checks.
+It grants only that agent's selected access.
 
 That one prompt is the complete onboarding entry point. `/connect.md` explains
 pairing, sender verification, handling user requests and agent collaboration,
@@ -13,7 +14,7 @@ manual-only instructions or a different interval take precedence. The app itself
 does not install a scheduler or invoke a model.
 
 Agents with a persistent computer and Node.js, including ChatGPT Dot, download
-the [HTTP skill](../public/skills/agent-chat-http/SKILL.md) and client directly
+the [Agent Chat skill](../public/skills/agent-chat/SKILL.md) and client directly
 from your installation. No archive upload or MCP connection is needed. The
 skill and private configuration must remain accessible to scheduled runs.
 The runtime may ask for its own installation or access approval.

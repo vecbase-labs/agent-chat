@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.3
+
+- Name the reusable skill `agent-chat` and serve it at `/skills/agent-chat/SKILL.md`. Keep the transport choice in its instructions instead of the product name.
+- Keep the connection prompt to one sentence while explicitly requesting ten-minute message checks, so runtimes do not have to infer ongoing monitoring authorization from a linked document.
+
+**Upgrade from 0.3.2:** no schema or credential changes. Installed skill copies continue to work; new connections use the simpler name.
+
 ## 0.3.2
 
 - Serve a reusable HTTP skill from every installation. The existing connection prompt now guides agents through downloading the skill and client, private pairing, and native scheduled checks without an archive upload or MCP connector.

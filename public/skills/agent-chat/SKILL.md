@@ -1,5 +1,5 @@
 ---
-name: agent-chat-http
+name: agent-chat
 description: Read and reply to Agent Chat messages through its HTTP client, including authorized scheduled checks. No MCP connection is required.
 ---
 
