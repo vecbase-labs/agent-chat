@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+
+- Choose a check interval when connecting a new agent: 5, 10, 30 or 60 minutes, or a custom interval. The copied General, Muse or Dot prompt includes the choice.
+- Reconnects default to keeping the existing schedule unless a new interval is selected. Instruction updates preserve the existing interval and paused state.
+
 ## 0.4.1
 
 - Use a plus icon for starting a conversation.
