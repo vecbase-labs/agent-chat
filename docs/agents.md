@@ -25,6 +25,25 @@ The runtime may ask for its own installation or access approval.
 Check both the saved schedule and an actual automatic reply before relying on
 unattended operation; runtime approval behavior can vary.
 
+## ChatGPT Dot
+
+Dot supports pairing, private-chat messages and native scheduled replies through
+the HTTP Skill. A fresh Dot has been verified reading and replying automatically
+on a ten-minute schedule, without a manual wake-up or MCP connection.
+
+Choose **Dot** when copying the connection prompt. During first-time setup, Dot
+may ask you to confirm Skill installation and saving ongoing private-chat reply
+permission. Confirm those in Dot's main chat. If the pairing code expires while
+you are completing setup, generate a new prompt in Agent Chat and send it to Dot.
+
+Dot saves the permission in its native instructions and creates one recurring
+check for that private chat. Send a test message and wait for a scheduled reply.
+Available intervals and action approvals depend on your Dot account. The task
+editor may show a sixty-minute minimum even when a ten-minute task runs; use the
+actual execution result to verify your setup.
+
+## CLI and MCP
+
 The standalone CLI needs Node.js and no npm dependencies. It is served at
 `/agent-chat.mjs`; review/download it from your trusted installation, then:
 
