@@ -7,7 +7,7 @@ import pg from 'pg'
 import { expect, test } from 'vitest'
 import { SCHEMA_VERSION } from '../src/lib/version'
 
-test.each([1, 2])(
+test.each([1, 2, 3])(
   'schema %i upgrades without changing existing identity or credential data',
   async (fromVersion) => {
     const target = new URL(process.env.TEST_DATABASE_URL || '')
@@ -34,7 +34,7 @@ test.each([1, 2])(
           createHash('sha256').update(baseline).digest('hex'),
         ],
       )
-      if (fromVersion === 2) {
+      if (fromVersion >= 2) {
         const activity = await readFile(
           'migrations/0002_agent_activity.sql',
           'utf8',
@@ -45,6 +45,20 @@ test.each([1, 2])(
           [
             '0002_agent_activity.sql',
             createHash('sha256').update(activity).digest('hex'),
+          ],
+        )
+      }
+      if (fromVersion >= 3) {
+        const avatars = await readFile(
+          'migrations/0003_agent_avatars.sql',
+          'utf8',
+        )
+        await db.query(avatars)
+        await db.query(
+          'INSERT INTO schema_migrations(version,name,checksum) VALUES(3,$1,$2)',
+          [
+            '0003_agent_avatars.sql',
+            createHash('sha256').update(avatars).digest('hex'),
           ],
         )
       }
@@ -62,6 +76,26 @@ test.each([1, 2])(
         "INSERT INTO actors(id,kind,name,owner_id,token_hash) VALUES($1,'agent','Existing agent',$2,'test-credential-hash')",
         [agent, owner],
       )
+      const chat = randomUUID()
+      await db.query(
+        "INSERT INTO conversations(id,name,kind,created_by,owner_id,last_seq) VALUES($1,'Upgrade chat','group',$2,$2,3)",
+        [chat, owner],
+      )
+      await db.query(
+        "INSERT INTO conversation_members(conversation_id,actor_id,last_read_seq,read_ranges) VALUES($1,$2,1,'{[1,2),[3,4)}'),($1,$3,0,'{}')",
+        [chat, owner, agent],
+      )
+      for (let seq = 1; seq <= 3; seq++)
+        await db.query(
+          "INSERT INTO messages(id,conversation_id,seq,sender_id,text,idempotency_key,request_hash) VALUES($1,$2,$3,$4,'Upgrade message',$5,'test-hash')",
+          [randomUUID(), chat, seq, agent, randomUUID()],
+        )
+      const membersBefore = (
+        await db.query('SELECT * FROM conversation_members ORDER BY actor_id')
+      ).rows
+      const messagesBefore = (
+        await db.query('SELECT * FROM messages ORDER BY seq')
+      ).rows
       const before = (await db.query('SELECT * FROM actors ORDER BY id')).rows
       target.searchParams.set('options', `-c search_path=${schema},public`)
       await promisify(execFile)(
@@ -87,9 +121,22 @@ test.each([1, 2])(
             expect(row.last_active_at).toBeNull()
             delete row.last_active_at
           }
-          return row
+          return fromVersion >= 3
+            ? { ...row, avatar_id, avatar_sha256, avatar_bytes }
+            : row
         }),
       ).toEqual(before)
+      expect(
+        (
+          await db.query('SELECT * FROM conversation_members ORDER BY actor_id')
+        ).rows.map(({ dismissed_through_seq, ...row }) => {
+          expect(dismissed_through_seq).toBe('0')
+          return row
+        }),
+      ).toEqual(membersBefore)
+      expect(
+        (await db.query('SELECT * FROM messages ORDER BY seq')).rows,
+      ).toEqual(messagesBefore)
       expect(
         (await db.query('SELECT max(version) FROM schema_migrations')).rows[0]
           .max,

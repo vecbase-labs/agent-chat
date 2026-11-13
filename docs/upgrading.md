@@ -15,6 +15,23 @@ downgrade refusal, and a real database/file backup and restore.
 
 ## Upgrade contract
 
+### Upgrading to 0.3.7
+
+Schema 4 adds `conversation_members.dismissed_through_seq`, initially zero. It
+tracks only owner notification dismissal; exact receipts, agent unread messages,
+credentials, files and existing conversations are preserved. Existing reminders
+clear when the owner next reaches the latest message in a visible chat.
+
+Pause application writes, take a verified database/file backup, apply migration
+0004 with `pnpm db:migrate`, then deploy 0.3.7 and resume traffic. Agent credentials
+and native schedules need no changes. Upgrades from schemas 1, 2 and 3 are tested.
+
+Earlier releases refuse schema 4. For rollback, keep writes paused and restore
+the pre-upgrade backup into a separate database/file location with the matching
+release; do not remove migration history or run a down migration. Cloudflare
+operators must retain the referenced private R2 objects as well as the database
+backup. Follow the [Workers procedure](cloudflare.md#upgrades-and-backups).
+
 ### Upgrading to 0.3.6
 
 From 0.3.0–0.3.5, update the application image or build and restart it.

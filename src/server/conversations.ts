@@ -96,10 +96,10 @@ export async function listConversations(
     COALESCE((SELECT jsonb_agg(jsonb_build_object('id',a.id,'name',a.name,'kind',a.kind,'owner_id',a.owner_id,'description',a.description,'disabled_at',a.disabled_at,'avatar_id',a.avatar_id) ORDER BY a.name)
       FROM conversation_members m JOIN actors a ON a.id=m.actor_id WHERE m.conversation_id=c.id),'[]') AS members,
     (SELECT left(text,160) FROM messages WHERE conversation_id=c.id ORDER BY seq DESC LIMIT 1) AS preview,
-    (SELECT count(*)::int FROM messages msg WHERE msg.conversation_id=c.id AND cm.actor_id IS NOT NULL AND msg.seq>cm.last_read_seq AND NOT(cm.read_ranges @> msg.seq::numeric) AND msg.sender_id<>$1
+    (SELECT count(*)::int FROM messages msg WHERE msg.conversation_id=c.id AND cm.actor_id IS NOT NULL AND msg.seq>GREATEST(cm.last_read_seq,CASE WHEN $2::boolean THEN cm.dismissed_through_seq ELSE 0 END) AND NOT(cm.read_ranges @> msg.seq::numeric) AND msg.sender_id<>$1
       AND (c.kind='direct' OR EXISTS(SELECT 1 FROM message_mentions mm WHERE mm.message_id=msg.id AND mm.actor_id=$1)
       OR EXISTS(SELECT 1 FROM messages parent WHERE parent.id=msg.reply_to AND parent.sender_id=$1))) AS attention,
-    (SELECT count(*)::int FROM messages msg WHERE msg.conversation_id=c.id AND cm.actor_id IS NOT NULL AND msg.seq>cm.last_read_seq AND NOT(cm.read_ranges @> msg.seq::numeric) AND msg.sender_id<>$1) AS unread
+    (SELECT count(*)::int FROM messages msg WHERE msg.conversation_id=c.id AND cm.actor_id IS NOT NULL AND msg.seq>GREATEST(cm.last_read_seq,CASE WHEN $2::boolean THEN cm.dismissed_through_seq ELSE 0 END) AND NOT(cm.read_ranges @> msg.seq::numeric) AND msg.sender_id<>$1) AS unread
     FROM conversations c LEFT JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.actor_id=$1
     WHERE (cm.actor_id IS NOT NULL OR ($2::boolean AND c.owner_id=$1))
       AND ($3='' OR c.name ILIKE '%' || $3 || '%' OR EXISTS (SELECT 1 FROM conversation_members search_member JOIN actors search_actor ON search_actor.id=search_member.actor_id WHERE search_member.conversation_id=c.id AND search_actor.name ILIKE '%' || $3 || '%'))
@@ -494,6 +494,37 @@ export async function unreadMessages(actor: Actor, count = 30) {
       )
     : []
   return { messages, conversations, hasMore: rows.length > count }
+}
+
+/** Dismiss owner notifications through an observed message, without receipts. */
+export async function dismissNotifications(
+  actor: Actor,
+  id: string,
+  messageId: string,
+) {
+  requireOwner(actor)
+  await membership(actor, id)
+  return transaction(async (client) => {
+    const member = await client.query(
+      'SELECT 1 FROM conversation_members WHERE conversation_id=$1 AND actor_id=$2 FOR UPDATE',
+      [id, actor.id],
+    )
+    if (!member.rowCount)
+      fail(404, 'NOT_FOUND', 'Conversation access was revoked.')
+    const message = await client.query<{ seq: string }>(
+      'SELECT seq FROM messages WHERE conversation_id=$1 AND id=$2',
+      [id, messageId],
+    )
+    if (!message.rows[0])
+      fail(400, 'INVALID_MESSAGE', 'Choose a message in this conversation.')
+    const result = await client.query<{ dismissed_through_seq: string }>(
+      `UPDATE conversation_members
+       SET dismissed_through_seq=GREATEST(dismissed_through_seq,$3::bigint)
+       WHERE conversation_id=$1 AND actor_id=$2 RETURNING dismissed_through_seq`,
+      [id, actor.id, message.rows[0].seq],
+    )
+    return { dismissedThrough: result.rows[0].dismissed_through_seq }
+  })
 }
 
 /** Receipt writes are idempotent, exact, and never bridge unread gaps. */

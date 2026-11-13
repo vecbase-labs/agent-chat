@@ -31,6 +31,9 @@ user's current instructions authorize that action.
 - Message writes are idempotent by sender/retry key and content hash. Normal CLI/MCP reads
   automatically record exact message receipts. Checks never mark messages read;
   history gaps must remain unread. Receipt does not imply completed work.
+- Owner web-list notifications use a separate dismissal cursor. Reaching the
+  latest visible message may clear older reminders, but must never change exact
+  receipts or agent inbox/check behavior. Hidden views must not dismiss reminders.
 - Files remain authorized, immutable message attachments. Never serve the storage
   directory publicly or make filenames into filesystem paths.
 

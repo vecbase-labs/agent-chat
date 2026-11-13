@@ -1195,7 +1195,160 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
     ).toBe(savedAvatarId)
   })
 
-  test('backup restores database, attachments, avatars and credentials into an empty target', async () => {
+  test('owner notification dismissal preserves exact receipts and agent unread delivery', async () => {
+    const sender = await createAgent('Notification sender')
+    const reader = await createAgent('Notification reader')
+    const chat = (
+      await request('conversations', {
+        data: {
+          kind: 'group',
+          name: 'Notification regression',
+          members: [sender.actor.id, reader.actor.id],
+        },
+      })
+    ).data.id
+    const sent: Payload[] = []
+    for (let i = 0; i < 6; i++) {
+      const result = await request(`conversations/${chat}/messages`, {
+        bearer: sender.token,
+        data: {
+          text: `Notification ${i}`,
+          idempotencyKey: randomUUID(),
+          mentions: [admin.id, reader.actor.id],
+        },
+      })
+      expect(result.status).toBe(201)
+      sent.push(result.data)
+    }
+    const listed = async (bearer?: string) =>
+      (await request('conversations', { bearer })).data.conversations.find(
+        (c: Payload) => c.id === chat,
+      )
+    expect((await listed()).unread).toBe(6)
+    await request(`conversations/${chat}/read`, {
+      data: { messageIds: [sent[5].id] },
+    })
+    const exactState = async () =>
+      (
+        await adminDb.query(
+          'SELECT actor_id,last_read_seq,read_ranges::text FROM conversation_members WHERE conversation_id=$1 ORDER BY actor_id',
+          [chat],
+        )
+      ).rows
+    const before = await exactState()
+    const checkBefore = (await request('check', { bearer: reader.token })).data
+    const inboxBefore = (await request('inbox', { bearer: reader.token })).data
+    const dismiss = (messageId: string, bearer?: string) =>
+      request(`conversations/${chat}/dismiss-notifications`, {
+        bearer,
+        data: { messageId },
+      })
+    expect((await dismiss(sent[4].id)).data.dismissedThrough).toBe('5')
+    expect((await listed()).unread).toBe(0)
+    expect((await listed()).attention).toBe(0)
+    expect(await exactState()).toEqual(before)
+    expect((await listed(reader.token)).unread).toBe(6)
+    expect((await request('check', { bearer: reader.token })).data).toEqual(
+      checkBefore,
+    )
+    expect((await request('inbox', { bearer: reader.token })).data).toEqual(
+      inboxBefore,
+    )
+    const history = (await request(`conversations/${chat}/messages?after=0`))
+      .data.messages
+    expect(
+      history
+        .slice(0, 5)
+        .every(
+          (m: Payload) => !m.read_by.some((a: Payload) => a.id === admin.id),
+        ),
+    ).toBe(true)
+    expect(history[5].read_by.some((a: Payload) => a.id === admin.id)).toBe(
+      true,
+    )
+
+    const next = (
+      await request(`conversations/${chat}/messages`, {
+        bearer: sender.token,
+        data: {
+          text: 'Arrived after viewing',
+          idempotencyKey: randomUUID(),
+          mentions: [admin.id],
+        },
+      })
+    ).data
+    // Retrying an older tab's boundary must not swallow newer messages or regress it.
+    const results = await Promise.all([
+      dismiss(sent[5].id),
+      dismiss(sent[0].id),
+      dismiss(sent[4].id),
+    ])
+    expect(results.every((r) => r.status === 200)).toBe(true)
+    expect((await listed()).unread).toBe(1)
+    expect((await listed()).attention).toBe(1)
+    expect((await dismiss(next.id, reader.token)).status).toBe(403)
+    expect((await dismiss(next.id, outsiderToken)).status).toBe(403)
+    expect((await dismiss(randomUUID())).status).toBe(400)
+    const foreign = (
+      await request(`conversations/${room}/messages?latest=true`)
+    ).data.messages.at(-1)
+    expect((await dismiss(foreign.id)).status).toBe(400)
+
+    const agentOnly = (
+      await request('conversations', {
+        data: { kind: 'direct', members: [sender.actor.id, reader.actor.id] },
+      })
+    ).data.id
+    const reviewMessage = (
+      await request(`conversations/${agentOnly}/messages`, {
+        bearer: sender.token,
+        data: { text: 'Agents only', idempotencyKey: randomUUID() },
+      })
+    ).data
+    expect(
+      (
+        await request(`conversations/${agentOnly}/dismiss-notifications`, {
+          data: { messageId: reviewMessage.id },
+        })
+      ).status,
+    ).toBe(404)
+    expect(
+      (
+        await adminDb.query(
+          'SELECT 1 FROM conversation_members WHERE conversation_id=$1 AND actor_id=$2',
+          [agentOnly, admin.id],
+        )
+      ).rowCount,
+    ).toBe(0)
+
+    const large = (
+      await request('conversations', {
+        data: { kind: 'direct', members: [reader.actor.id] },
+      })
+    ).data.id
+    await adminDb.query(
+      'UPDATE conversations SET last_seq=9007199254740992 WHERE id=$1',
+      [large],
+    )
+    const largeMessage = (
+      await request(`conversations/${large}/messages`, {
+        bearer: reader.token,
+        data: {
+          text: 'Large notification cursor',
+          idempotencyKey: randomUUID(),
+        },
+      })
+    ).data
+    expect(
+      (
+        await request(`conversations/${large}/dismiss-notifications`, {
+          data: { messageId: largeMessage.id },
+        })
+      ).data.dismissedThrough,
+    ).toBe('9007199254740993')
+  })
+
+  test('backup restores database, attachments, avatars, notifications and credentials into an empty target', async () => {
     const destination = join(filesDir, 'backup')
     await execute(
       process.execPath,
@@ -1245,6 +1398,11 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
         (await restored.query('SELECT count(*) FROM messages')).rows[0].count,
       ).toBe(
         (await adminDb.query('SELECT count(*) FROM messages')).rows[0].count,
+      )
+      const memberState =
+        'SELECT conversation_id,actor_id,last_read_seq,read_ranges::text,dismissed_through_seq FROM conversation_members ORDER BY conversation_id,actor_id'
+      expect((await restored.query(memberState)).rows).toEqual(
+        (await adminDb.query(memberState)).rows,
       )
       expect(
         (
