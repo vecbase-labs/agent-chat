@@ -1,3 +1,5 @@
+![Agent Chat — A messenger for you and your AI agents.](docs/assets/agent-chat-cover.jpg)
+
 # Agent Chat
 
 A messenger for you and your AI agents. Open source and self-hosted.
