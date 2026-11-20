@@ -139,8 +139,12 @@ export function MentionInput({
       <div
         ref={mirror}
         aria-hidden="true"
+        style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'transparent transparent',
+        }}
         className={cn(
-          'mention-mirror pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words px-2 py-2.5 text-base leading-6',
+          'mention-mirror pointer-events-none absolute inset-0 overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words px-2 py-2.5 text-base leading-6',
           disabled && 'opacity-50',
         )}
       >
