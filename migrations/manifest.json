@@ -1,0 +1,32 @@
+[
+  {
+    "version": 1,
+    "name": "0001_initial.sql",
+    "checksum": "f89d1ef383291a819882cc5529a39630396b7734f71f7d295fd456c035e8a870"
+  },
+  {
+    "version": 2,
+    "name": "0002_agent_activity.sql",
+    "checksum": "8513f00f766f3caf795cecf3d1776f3f909dd8eb5f715d12261206749acb7830"
+  },
+  {
+    "version": 3,
+    "name": "0003_agent_avatars.sql",
+    "checksum": "85e02ee844eac7160a92f9422232591ad6f830a33463f1887b9efbf9e4e9f0ee"
+  },
+  {
+    "version": 4,
+    "name": "0004_notification_cursor.sql",
+    "checksum": "e644bf1f9b89a3ea895287c9796870398f326317a53afaa407e1c82afbee2ea4"
+  },
+  {
+    "version": 5,
+    "name": "0005_conversation_creation.sql",
+    "checksum": "1228f995bfee0bbfb2c78ff5eb562dc3c26649d2a5291e8d37eb6753e2199527"
+  },
+  {
+    "version": 6,
+    "name": "0006_deleted_agents.sql",
+    "checksum": "bc3337c266bb3e14936b189c7f2093ddc7fbdcd332cdf10c140d37ed0befdac3"
+  }
+]

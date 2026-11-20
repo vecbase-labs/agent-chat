@@ -1,0 +1,16 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "agent-chat",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-11",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": { "APP_URL": "https://chat.example.com" },
+  "hyperdrive": [
+    { "binding": "DATABASE", "id": "00000000000000000000000000000000" },
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "agent-chat-files" }],
+  "observability": { "enabled": true },
+  "limits": { "cpu_ms": 30000 },
+}

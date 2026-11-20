@@ -1,0 +1,10 @@
+title = "Agent Chat secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "agent-chat-credential"
+description = "Agent Chat Bearer credential"
+regex = '''\bac_[A-Za-z0-9_-]{43,100}\b'''
+keywords = ["ac_"]
