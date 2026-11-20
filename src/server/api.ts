@@ -28,6 +28,7 @@ import {
   cursorSchema,
   dismissNotifications,
   inbox,
+  inboxFilter,
   inviteMembers,
   unreadMessages,
   markRead,
@@ -62,7 +63,12 @@ async function route(request: Request, activity: { actor?: Actor }) {
   const method = request.method
   if (path.length > 3) fail(404, 'NOT_FOUND', 'Unknown endpoint.')
   if (resource === 'health' && method === 'GET')
-    return json({ ok: true, version: APP_VERSION, apiVersion: API_VERSION })
+    return json({
+      ok: true,
+      version: APP_VERSION,
+      apiVersion: API_VERSION,
+      capabilities: ['inbox-filters'],
+    })
   if (resource === 'bootstrap' && method === 'GET') {
     const [instance] = await query<{ name: string }>(
       'SELECT name FROM instance WHERE id=1',
@@ -109,6 +115,10 @@ async function route(request: Request, activity: { actor?: Actor }) {
           .min(1)
           .max(100)
           .parse(url.searchParams.get('limit') || 30),
+        inboxFilter.parse(url.searchParams.get('filter') ?? 'all'),
+        uuid
+          .optional()
+          .parse(url.searchParams.get('conversationId') ?? undefined),
       ),
     )
   if (resource === 'actors' && method === 'GET')

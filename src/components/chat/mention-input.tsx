@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import { Button } from '#/components/ui/button'
 import { Textarea } from '#/components/ui/textarea'
 import { cn } from '#/lib/utils'
@@ -30,6 +30,7 @@ export function MentionInput({
 }) {
   const listId = useId()
   const list = useRef<HTMLDivElement>(null)
+  const mirror = useRef<HTMLDivElement>(null)
   const beforeEdit = useRef<TextSelection | undefined>(undefined)
   const [selection, setSelection] = useState({ start: 0, end: 0 })
   const [focused, setFocused] = useState(false)
@@ -56,6 +57,12 @@ export function MentionInput({
     Math.max(0, candidates.length - 1),
   )
   const selected = candidates.at(index)
+  const highlights = value.mentions
+    .filter(
+      (mention) =>
+        value.text.slice(mention.start, mention.end) === mention.label,
+    )
+    .sort((a, b) => a.start - b.start)
   function currentSelection() {
     const input = inputRef.current
     return { start: input?.selectionStart || 0, end: input?.selectionEnd || 0 }
@@ -129,6 +136,29 @@ export function MentionInput({
           )}
         </div>
       )}
+      <div
+        ref={mirror}
+        aria-hidden="true"
+        style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'transparent transparent',
+        }}
+        className={cn(
+          'mention-mirror pointer-events-none absolute inset-0 overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words px-2 py-2.5 text-base leading-6',
+          disabled && 'opacity-50',
+        )}
+      >
+        {highlights.map((mention, i) => (
+          <Fragment key={`${mention.id}-${mention.start}`}>
+            {value.text.slice(i ? highlights[i - 1].end : 0, mention.start)}
+            <mark className="rounded-sm bg-primary/15 text-primary">
+              {mention.label}
+            </mark>
+          </Fragment>
+        ))}
+        {value.text.slice(highlights.at(-1)?.end || 0)}
+        {'\u200b'}
+      </div>
       <Textarea
         ref={inputRef}
         aria-label="Message"
@@ -138,10 +168,14 @@ export function MentionInput({
           open && selected ? `${listId}-${selected.id}` : undefined
         }
         placeholder="Write a message…"
-        className="composer-input min-h-10 max-h-40 resize-none border-0 bg-transparent px-2 py-2.5 text-base leading-6 shadow-none focus-visible:ring-0 dark:bg-transparent md:text-base"
+        className="composer-input relative min-h-10 max-h-40 resize-none border-0 bg-transparent px-2 py-2.5 text-base leading-6 text-transparent caret-foreground shadow-none focus-visible:ring-0 dark:bg-transparent md:text-base"
         rows={1}
         value={value.text}
         disabled={disabled}
+        onScroll={(event) => {
+          if (mirror.current)
+            mirror.current.scrollTop = event.currentTarget.scrollTop
+        }}
         onFocus={() => {
           setFocused(true)
           setSelection(currentSelection())

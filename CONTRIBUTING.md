@@ -3,7 +3,10 @@
 Use English for code, primary documentation, issue descriptions and pull requests.
 Keep the Chinese README aligned with the English version; translations are welcome.
 Keep changes small enough to review and include the relevant validation.
-Read [architecture](docs/architecture.md) before changing identity, message ordering
+Agent Chat is a simple, general-purpose chat tool. Work assignment is one use,
+not a reason to add task states, work queues or management dashboards. Prefer
+familiar chat features and keep intelligence in external runtimes.
+Read the [product principles and architecture](docs/architecture.md) before changing identity, message ordering
 or permission behavior.
 
 ## Local development

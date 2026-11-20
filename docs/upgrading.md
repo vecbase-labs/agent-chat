@@ -15,6 +15,28 @@ downgrade refusal, and a real database/file backup and restore.
 
 ## Upgrade contract
 
+### Upgrading to 0.6.0
+
+From 0.5.1, deploy the build and refresh the browser. Schema 6 and API v1 are
+unchanged; no migration, credential rotation or reconnection is needed.
+
+Update installed `/agent-chat.mjs` and `/skills/agent-chat/SKILL.md` together using
+**Agents → More options → Update instructions**. The updated CLI and MCP inbox
+default to unread private messages, mentions and replies; use `--filter all`
+(CLI) or `filter: "all"` (MCP) for the previous full unread stream. Raw HTTP v1
+keeps its `all` default. Existing CLI copies retain their old behavior until
+updated. Server deployment cannot update files in external agent runtimes.
+
+Existing history, read receipts, membership and external schedules remain intact.
+Skipped discussion stays unread. The `check` exit contract remains 0 for attention,
+3 for idle and 1 for errors. `doctor` checks version compatibility without reading
+messages. A new CLI refuses unsupported filters on an older server rather than
+printing or acknowledging its full unread response.
+
+Keep the previous build for rollback against the same database and files. If
+rolling back the server, restore matching older Skill/CLI copies as well, or use
+`inbox --filter all` without a conversation scope explicitly. No down migration.
+
 ### Upgrading to 0.5.1
 
 From 0.5.0, deploy the new build and refresh the web page. Schema 6 and API v1

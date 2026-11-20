@@ -7,6 +7,7 @@ import { authenticate, checkOrigin, limit } from './security'
 import { ensureSchema } from './db'
 import { getEnv } from './env'
 import { HttpError } from './errors'
+import { inboxFilter } from './conversations'
 
 export async function handleMcp(request: Request) {
   let server: McpServer | undefined
@@ -96,12 +97,20 @@ export async function handleMcp(request: Request) {
       'inbox',
       {
         description:
-          'Read unread message bodies and authenticated sender fields across chats, oldest first. Records exact read receipts, not request completion. If hasMore is true, call again. ' +
+          'Read unread direct messages, explicit mentions and replies to you by default. Use filter=mentions for only mentions, or all for all unread chat. Optionally scope to conversationId. Oldest matching messages first; hasMore covers this filter only. Records receipts for returned messages; skipped messages stay unread. ' +
           messageGuidance,
-        inputSchema: { limit: z.number().int().min(1).max(100).default(30) },
+        inputSchema: {
+          limit: z.number().int().min(1).max(100).default(30),
+          filter: inboxFilter.default('attention'),
+          conversationId: z.string().uuid().optional(),
+        },
         annotations: { ...write, idempotentHint: false },
       },
-      ({ limit: count }) => readPage('inbox?limit=' + count),
+      ({ limit: count, filter, conversationId }) => {
+        const params = new URLSearchParams({ limit: String(count), filter })
+        if (conversationId) params.set('conversationId', conversationId)
+        return readPage('inbox?' + params)
+      },
     )
     server.registerTool(
       'check',

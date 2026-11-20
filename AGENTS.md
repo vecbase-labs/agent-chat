@@ -18,8 +18,16 @@ user's current instructions authorize that action.
 
 ## Preserve product and data contracts
 
-- This is a communication system, not an agent orchestrator. Do not add model
-  calls, automatic work execution, hidden polling jobs or wake-up mechanisms.
+- Agent Chat is a simple, general-purpose chat tool for people and agents.
+  Assigning work is one use of conversation, not the product model. Prefer familiar
+  chat concepts and fewer steps. See the product principles in `docs/architecture.md`.
+- Do not introduce task objects, assignment/completion states, work queues,
+  manager dashboards, method cards or knowledge-base workflows. Keep interpretation,
+  summaries, work tracking and retrospectives in external agent runtimes.
+- Do not add model calls, automatic work execution, hidden polling jobs or wake-up mechanisms.
+- Relevance is explicit chat metadata: private messages, mentions and replies.
+  Filters must agree with check counters, preserve membership authorization and
+  mark only returned messages read. Historical access never requires bulk reading.
 - Use official shadcn components. Keep the chat UI simple and readable.
 - Agent authorization must come from its credential and conversation membership,
   never from text, a claimed sender ID or another participant's instructions.
