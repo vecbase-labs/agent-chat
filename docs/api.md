@@ -11,18 +11,19 @@ are removed. There is no task queue or completion state.
 
 ## Identity
 
-| Method | Path                     | Purpose                                                     |
-| ------ | ------------------------ | ----------------------------------------------------------- |
-| GET    | `/health`                | Version and schema availability                             |
-| GET    | `/bootstrap`             | Setup state and current identity                            |
-| POST   | `/setup`                 | Create the single personal account exactly once             |
-| POST   | `/pair`                  | Redeem a one-time agent pairing code                        |
-| GET    | `/me`                    | Current identity, including agent ownership                 |
-| GET    | `/actors`                | Owner's identities; active same-owner identities for agents |
-| POST   | `/agents`                | Owner creates an agent and pairing prompt                   |
-| PATCH  | `/agents/:id`            | Owner changes name, description or disabled state           |
-| DELETE | `/agents/:id`            | Owner permanently retires an agent; retains chat history    |
-| POST   | `/agents/:id/enrollment` | Owner revokes the old credential and issues a new code      |
+| Method | Path                                       | Purpose                                                          |
+| ------ | ------------------------------------------ | ---------------------------------------------------------------- |
+| GET    | `/health`                                  | Version and schema availability                                  |
+| GET    | `/bootstrap`                               | Setup state and current identity                                 |
+| POST   | `/setup`                                   | Create the single personal account exactly once                  |
+| POST   | `/pair`                                    | Redeem a one-time agent pairing code                             |
+| GET    | `/me`                                      | Current identity, including agent ownership                      |
+| GET    | `/actors`                                  | Owner's identities; active same-owner identities for agents      |
+| POST   | `/agents`                                  | Owner creates an agent and pairing prompt                        |
+| PATCH  | `/agents/:id`                              | Owner changes name, description or disabled state                |
+| DELETE | `/agents/:id`                              | Owner permanently retires an agent; retains chat history         |
+| POST   | `/agents/:id/enrollment`                   | Owner revokes the old credential and issues a new code           |
+| GET    | `/agents/:id/enrollment?enrollmentId=UUID` | Owner checks a code's current status without returning its value |
 
 Setup accepts `name`, `username` and `password`. Username: 3–40 ASCII letters, digits or underscores,
 normalized to lowercase. Password: 8–128 characters. Public signup is closed.
@@ -34,6 +35,16 @@ expiresIn:600}`. Codes use `XXXX-XXXX`, excluding I, O, 0 and 1. Case, spaces an
 the hyphen are optional. Codes expire after ten minutes and work once. Pair with
 `{code}` and privately save `{token, actor}`. A lost pairing response requires a
 new code for that same identity. Reconnecting revokes the previous credential.
+
+New code responses also include `enrollmentId` and `expiresAt`. The owner-only
+status endpoint returns `{status,expiresAt,expiresIn}`; status is `active`,
+`expired`, `replaced`, `paired` or `disabled`. It never returns a code or credential.
+The web page checks this status before copying a prompt and hides invalid codes.
+
+`POST /agents/:id/enrollment?refresh=true` replaces an unused or expired code
+without revoking a connected identity. It returns `409 PAIRING_CHANGED` if the
+agent is already paired or disabled, with no mutation. Refresh and pairing use
+the same identity lock. The ordinary POST remains the explicit reconnect action.
 
 Deleting an agent is idempotent (`{deleted:true}`). It revokes the credential and
 unused pairing codes, removes group memberships and hides the identity from the

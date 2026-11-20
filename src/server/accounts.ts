@@ -6,7 +6,7 @@ import {
   MIN_PASSWORD_LENGTH,
   MAX_PASSWORD_LENGTH,
 } from '../lib/password-policy'
-import { transaction } from './db'
+import { query, transaction } from './db'
 import { actorColumns, hash } from './security'
 import { getEnv } from './env'
 import { fail } from './errors'
@@ -87,18 +87,30 @@ function normalizePairingCode(code: string) {
     : code.trim()
 }
 
-export async function enrollment(agentId: string, reconnect = false) {
+export async function enrollment(
+  agentId: string,
+  mode: 'new' | 'reconnect' | 'refresh' = 'new',
+) {
   return transaction(async (client) => {
     const result = await client.query(
-      `SELECT id FROM actors WHERE id=$1 AND kind='agent' AND deleted_at IS NULL FOR UPDATE`,
+      `SELECT id,token_hash,disabled_at FROM actors WHERE id=$1 AND kind='agent' AND deleted_at IS NULL FOR UPDATE`,
       [agentId],
     )
     if (!result.rowCount) fail(404, 'NOT_FOUND', 'Agent not found.')
+    if (
+      mode === 'refresh' &&
+      (result.rows[0].token_hash || result.rows[0].disabled_at)
+    )
+      fail(
+        409,
+        'PAIRING_CHANGED',
+        'This agent is connected or disabled. Return to Agents to reconnect it.',
+      )
     await client.query(
       `UPDATE enrollments SET consumed_at=now() WHERE actor_id=$1 AND consumed_at IS NULL`,
       [agentId],
     )
-    if (reconnect)
+    if (mode === 'reconnect')
       await client.query(
         'UPDATE actors SET token_hash=NULL,disabled_at=NULL WHERE id=$1',
         [agentId],
@@ -111,11 +123,18 @@ export async function enrollment(agentId: string, reconnect = false) {
       ).join('')
       const code = `${symbols.slice(0, 4)}-${symbols.slice(4)}`
       const inserted = await client.query(
-        `INSERT INTO enrollments(id,actor_id,code_hash,expires_at) VALUES($1,$2,$3,now()+interval '10 minutes') ON CONFLICT (code_hash) DO NOTHING RETURNING id`,
+        `INSERT INTO enrollments(id,actor_id,code_hash,expires_at) VALUES($1,$2,$3,now()+interval '10 minutes') ON CONFLICT (code_hash) DO NOTHING RETURNING id,expires_at`,
         [newId(), agentId, hash(code)],
       )
       if (inserted.rowCount)
-        return { code, expiresIn: 600, server: getEnv().appUrl, agentId }
+        return {
+          code,
+          expiresIn: 600,
+          expiresAt: inserted.rows[0].expires_at,
+          enrollmentId: inserted.rows[0].id,
+          server: getEnv().appUrl,
+          agentId,
+        }
     }
     fail(
       503,
@@ -123,6 +142,30 @@ export async function enrollment(agentId: string, reconnect = false) {
       'Unable to create a pairing code. Try again.',
     )
   })
+}
+export async function enrollmentStatus(agentId: string, enrollmentId: string) {
+  const [row] = await query<{
+    status: 'active' | 'expired' | 'replaced' | 'paired' | 'disabled'
+    expires_at: Date
+    expires_in: number
+  }>(
+    `SELECT CASE
+      WHEN a.disabled_at IS NOT NULL THEN 'disabled'
+      WHEN a.token_hash IS NOT NULL THEN 'paired'
+      WHEN e.consumed_at IS NOT NULL THEN 'replaced'
+      WHEN e.expires_at<=clock_timestamp() THEN 'expired'
+      ELSE 'active' END AS status,
+      e.expires_at,GREATEST(0,CEIL(EXTRACT(EPOCH FROM (e.expires_at-clock_timestamp()))))::int AS expires_in
+     FROM enrollments e JOIN actors a ON a.id=e.actor_id
+     WHERE e.id=$1 AND e.actor_id=$2 AND a.deleted_at IS NULL`,
+    [enrollmentId, agentId],
+  )
+  if (!row) fail(404, 'NOT_FOUND', 'Pairing code not found.')
+  return {
+    status: row.status,
+    expiresAt: row.expires_at,
+    expiresIn: row.expires_in,
+  }
 }
 export async function pair(code: string) {
   code = normalizePairingCode(code)

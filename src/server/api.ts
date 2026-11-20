@@ -14,7 +14,13 @@ import {
   requireOwner,
   uuid,
 } from './security'
-import { accountInput, enrollment, pair, setup } from './accounts'
+import {
+  accountInput,
+  enrollment,
+  enrollmentStatus,
+  pair,
+  setup,
+} from './accounts'
 import { deleteAgent } from './agents'
 import {
   conversationInput,
@@ -188,7 +194,23 @@ async function route(request: Request, activity: { actor?: Actor }) {
     )
       fail(404, 'NOT_FOUND', 'Agent not found.')
     if (action === 'enrollment' && method === 'POST')
-      return json(await enrollment(id, true))
+      return json(
+        await enrollment(
+          id,
+          z
+            .enum(['true', 'false'])
+            .parse(url.searchParams.get('refresh') ?? 'false') === 'true'
+            ? 'refresh'
+            : 'reconnect',
+        ),
+      )
+    if (action === 'enrollment' && method === 'GET')
+      return json(
+        await enrollmentStatus(
+          id,
+          uuid.parse(url.searchParams.get('enrollmentId')),
+        ),
+      )
     if (action === 'avatar' && ['PUT', 'DELETE'].includes(method)) {
       await limit(actor.id + ':avatar', 20)
       return json(await updateAvatar(actor, id, request))

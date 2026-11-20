@@ -1003,6 +1003,158 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
     ).data.token
   })
 
+  test('pairing status tracks expiry and replacement; refreshing cannot revoke a connected agent', async () => {
+    const first = (
+      await request('agents', { data: { name: 'Pairing renewal fixture' } })
+    ).data
+    const state = (
+      enrollmentId = first.enrollmentId,
+      bearer?: string,
+      actorId = first.agentId,
+    ) =>
+      request(`agents/${actorId}/enrollment?enrollmentId=${enrollmentId}`, {
+        bearer,
+      })
+    expect(first.enrollmentId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(new Date(first.expiresAt).getTime()).toBeGreaterThan(Date.now())
+    expect((await state()).data.status).toBe('active')
+    expect((await state()).data.expiresIn).toBeGreaterThan(0)
+    expect((await state()).data.expiresIn).toBeLessThanOrEqual(600)
+    expect(Object.keys((await state()).data).sort()).toEqual([
+      'expiresAt',
+      'expiresIn',
+      'status',
+    ])
+    expect((await state(first.enrollmentId, token)).status).toBe(403)
+    expect((await state(first.enrollmentId, undefined, agent.id)).status).toBe(
+      404,
+    )
+    expect((await state(randomUUID())).status).toBe(404)
+    const pendingBefore = (
+      await adminDb.query('SELECT * FROM enrollments WHERE id=$1', [
+        first.enrollmentId,
+      ])
+    ).rows
+    await state()
+    expect(
+      (
+        await adminDb.query('SELECT * FROM enrollments WHERE id=$1', [
+          first.enrollmentId,
+        ])
+      ).rows,
+    ).toEqual(pendingBefore)
+    const renewed = await request(
+      `agents/${first.agentId}/enrollment?refresh=true`,
+      { data: {} },
+    )
+    expect(renewed.status).toBe(200)
+    expect(renewed.data.code).not.toBe(first.code)
+    expect((await state()).data.status).toBe('replaced')
+    expect(
+      (await request('pair', { anonymous: true, data: { code: first.code } }))
+        .status,
+    ).toBe(400)
+    await adminDb.query(
+      "UPDATE enrollments SET expires_at=now()-interval '1 second' WHERE id=$1",
+      [renewed.data.enrollmentId],
+    )
+    expect((await state(renewed.data.enrollmentId)).data).toMatchObject({
+      status: 'expired',
+      expiresIn: 0,
+    })
+    const fresh = (
+      await request(`agents/${first.agentId}/enrollment?refresh=true`, {
+        data: {},
+      })
+    ).data
+    const paired = await request('pair', {
+      anonymous: true,
+      data: { code: fresh.code },
+    })
+    expect(paired.status).toBe(200)
+    expect((await state(fresh.enrollmentId)).data.status).toBe('paired')
+    const protectedCredential = (
+      await adminDb.query('SELECT token_hash FROM actors WHERE id=$1', [
+        first.agentId,
+      ])
+    ).rows
+    expect(
+      (
+        await request(`agents/${first.agentId}/enrollment?refresh=true`, {
+          data: {},
+        })
+      ).data.error.code,
+    ).toBe('PAIRING_CHANGED')
+    expect((await request('me', { bearer: paired.data.token })).status).toBe(
+      200,
+    )
+    expect(
+      (
+        await request(`agents/${first.agentId}/enrollment?refresh=typo`, {
+          data: {},
+        })
+      ).status,
+    ).toBe(400)
+    expect(
+      (
+        await adminDb.query('SELECT token_hash FROM actors WHERE id=$1', [
+          first.agentId,
+        ])
+      ).rows,
+    ).toEqual(protectedCredential)
+    // An explicit reconnect still replaces the credential and opens a fresh code.
+    const reconnect = (
+      await request(`agents/${first.agentId}/enrollment`, { data: {} })
+    ).data
+    expect((await request('me', { bearer: paired.data.token })).status).toBe(
+      401,
+    )
+    expect((await state(reconnect.enrollmentId)).data.status).toBe('active')
+    await request(`agents/${first.agentId}`, {
+      method: 'PATCH',
+      data: { disabled: true },
+    })
+    expect((await state(reconnect.enrollmentId)).data.status).toBe('disabled')
+    expect(
+      (
+        await request(`agents/${first.agentId}/enrollment?refresh=true`, {
+          data: {},
+        })
+      ).status,
+    ).toBe(409)
+    await request(`agents/${first.agentId}`, { method: 'DELETE' })
+    expect((await state(reconnect.enrollmentId)).status).toBe(404)
+  })
+
+  test('concurrent code refresh and pairing never revoke a credential just returned to an agent', async () => {
+    const created = (
+      await request('agents', { data: { name: 'Concurrent pairing renewal' } })
+    ).data
+    const [paired, refreshed] = await Promise.all([
+      request('pair', { anonymous: true, data: { code: created.code } }),
+      request(`agents/${created.agentId}/enrollment?refresh=true`, {
+        data: {},
+      }),
+    ])
+    if (paired.status === 200) {
+      expect(refreshed.status).toBe(409)
+      expect((await request('me', { bearer: paired.data.token })).status).toBe(
+        200,
+      )
+    } else {
+      expect(paired.status).toBe(400)
+      expect(refreshed.status).toBe(200)
+      expect(
+        (
+          await request('pair', {
+            anonymous: true,
+            data: { code: refreshed.data.code },
+          })
+        ).status,
+      ).toBe(200)
+    }
+  })
+
   test('MCP uses the same scoped identities and structured messages', async () => {
     const response = await fetch(origin + '/mcp', {
       method: 'POST',

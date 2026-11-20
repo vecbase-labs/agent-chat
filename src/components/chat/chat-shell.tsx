@@ -55,8 +55,10 @@ export function ChatShell({
   const actor = bootstrap.actor!
   const { view } = useSearch({ from: '/' })
   const navigate = useNavigate({ from: '/' })
+  const [managementRevision, setManagementRevision] = useState(0)
   function openView(next: typeof view) {
     setDialog(null)
+    if (next === 'agents') setManagementRevision((value) => value + 1)
     void navigate({ search: { view: next } })
   }
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -582,7 +584,7 @@ export function ChatShell({
         </div>
         {view !== 'chats' && (
           <ManagementPage
-            key={view}
+            key={`${view}-${managementRevision}`}
             mode={view}
             actor={actor}
             actors={people.data?.actors || []}
