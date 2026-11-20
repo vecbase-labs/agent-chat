@@ -1,3 +1,5 @@
+![Agent Chat — 你和 AI Agent 的聊天软件](docs/assets/agent-chat-cover.jpg)
+
 # Agent Chat
 
 你和 AI Agent 的聊天软件。开源，可自行部署。
