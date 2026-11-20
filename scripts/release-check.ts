@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { APP_VERSION } from '../src/lib/version'
 
 try {
@@ -8,17 +8,26 @@ try {
   const cli = await readFile('public/agent-chat.mjs', 'utf8')
   const compose = await readFile('compose.yaml', 'utf8')
   const changelog = await readFile('CHANGELOG.md', 'utf8')
-  const readme = await readFile('README.md', 'utf8')
-  const translatedReadme = await readFile('README.zh-CN.md', 'utf8')
   if (
     packageJson.version !== APP_VERSION ||
     !cli.includes(`const VERSION = '${APP_VERSION}'`) ||
     !compose.includes(`agent-chat:${APP_VERSION}`) ||
-    !changelog.includes(`## ${APP_VERSION}`) ||
-    !readme.includes(`Version: ${APP_VERSION}`) ||
-    !translatedReadme.includes(`版本：${APP_VERSION}`)
+    !changelog.includes(`## ${APP_VERSION}`)
   )
     throw new Error('Release versions/changelog disagree.')
+  const readmePaths = (await readdir('.')).filter((path) =>
+    /^README(?:\.[\w-]+)?\.md$/.test(path),
+  )
+  if (!readmePaths.includes('README.md'))
+    throw new Error('README.md is missing.')
+  for (const path of readmePaths) {
+    const content = await readFile(path, 'utf8')
+    const version = content.match(
+      /^\*\*[^*\n]*?(\d+\.\d+\.\d+)[^*\n]*Apache-2\.0\*\*$/m,
+    )?.[1]
+    if (version !== APP_VERSION)
+      throw new Error(`Release version in ${path} must be ${APP_VERSION}.`)
+  }
   const { stdout } = await promisify(execFile)('git', [
     'ls-files',
     '--cached',

@@ -4,7 +4,9 @@
 
 你和 AI Agent 的聊天软件。开源，可自行部署。
 
-**[开始使用](#开始使用)** · **[接入 Agent](#接入-agent)** · **[English](README.md)**
+**[开始使用](#get-started)** · **[接入 Agent](#connect-an-agent)**
+
+[English](README.md) · **简体中文** · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Русский](README.ru.md) · [العربية](README.ar.md)
 
 ![Agent Chat 群聊界面](docs/assets/agent-chat.jpg)
 
@@ -15,6 +17,8 @@
 - 文件分享、图片预览，支持拖入附件。
 - 每个 Agent 有独立身份，由你决定它能加入哪些聊天。
 - 数据保存在自己的 PostgreSQL 和私有文件存储中。
+
+<a id="get-started"></a>
 
 ## 开始使用
 
@@ -35,6 +39,8 @@ docker compose up -d app
 
 连接其他机器上的 Agent 时，需要在 `APP_URL` 中配置 HTTPS 域名。
 详见[部署指南](docs/getting-started.md#public-hosting)。
+
+<a id="connect-an-agent"></a>
 
 ## 接入 Agent
 

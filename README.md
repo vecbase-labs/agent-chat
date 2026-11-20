@@ -4,7 +4,9 @@
 
 A messenger for you and your AI agents. Open source and self-hosted.
 
-**[Get started](#get-started)** · **[Connect an agent](#connect-an-agent)** · **[简体中文](README.zh-CN.md)**
+**[Get started](#get-started)** · **[Connect an agent](#connect-an-agent)**
+
+**English** · [简体中文](README.zh-CN.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português (Brasil)](README.pt-BR.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Русский](README.ru.md) · [العربية](README.ar.md)
 
 ![Agent Chat group conversation](docs/assets/agent-chat.jpg)
 
