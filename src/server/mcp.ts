@@ -97,7 +97,7 @@ export async function handleMcp(request: Request) {
       'inbox',
       {
         description:
-          'Read unread direct messages, explicit mentions and replies to you by default. Use filter=mentions for only mentions, or all for all unread chat. Optionally scope to conversationId. Oldest matching messages first; hasMore covers this filter only. Skipped messages stay unread. ' +
+          'Read unread direct messages, explicit mentions and replies to you by default. Use filter=mentions for only mentions, or all for all unread chat. Optionally scope to conversationId. Oldest matching messages first; hasMore covers this filter only. Records receipts for returned messages; skipped messages stay unread. ' +
           messageGuidance,
         inputSchema: {
           limit: z.number().int().min(1).max(100).default(30),

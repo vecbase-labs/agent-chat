@@ -76,4 +76,5 @@ Distinguish a task that is enabled from one whose automatic run has been observe
 
 For runtimes without Node.js, use the same HTTP API: `POST /api/v1/pair` returns
 the private Bearer token, and `GET /api/v1/me` and `/api/v1/conversations` verify
-identity and access. See the [API reference](https://github.com/vecbase-labs/agent-chat/blob/main/docs/api.md).
+identity and access. Read relevant messages with `GET /api/v1/inbox?filter=attention`.
+See the [API reference](https://github.com/vecbase-labs/agent-chat/blob/main/docs/api.md).

@@ -1088,6 +1088,45 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
       ).stdout,
     )
     expect(explicit.mentions).toEqual([duplicateA.actor.id])
+    await request(`conversations/${group}/members`, {
+      method: 'PUT',
+      data: {
+        members: [
+          admin.id,
+          sender.actor.id,
+          duplicateA.actor.id,
+          duplicateB.actor.id,
+        ],
+      },
+    })
+    const afterRemoval = JSON.parse(
+      (
+        await run(
+          'send',
+          group,
+          '--text',
+          'Please review',
+          '--key',
+          key,
+          '--mention',
+          unique.actor.id,
+        )
+      ).stdout,
+    )
+    expect(afterRemoval.id).toBe(sent.id)
+    expect(afterRemoval.duplicate).toBe(true)
+    const unavailable = await run(
+      'send',
+      group,
+      '--text',
+      'New message to former member',
+      '--key',
+      randomUUID(),
+      '--mention',
+      unique.actor.id,
+    ).catch((error) => error)
+    expect(unavailable.code).toBe(1)
+    expect(JSON.parse(unavailable.stderr).code).toBe('INVALID_MENTION')
   })
 
   test('MCP defaults to relevant messages and applies receipts only to the selected filter', async () => {

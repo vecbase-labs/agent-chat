@@ -236,6 +236,10 @@ async function main() {
       // IDs are authoritative; names are exact, case-sensitive conveniences.
       const byId = members.find((member) => member.id === value.toLowerCase())
       if (byId) return { id: byId.id, name: byId.name }
+      if (/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value))
+        // Preserve exact-ID retries if this recipient left after the original send.
+        // The server validates membership for new messages and the hash for retries.
+        return { id: value.toLowerCase(), name: null }
       const matches = members.filter((member) => member.name === value)
       if (matches.length !== 1) {
         const error = new Error(
