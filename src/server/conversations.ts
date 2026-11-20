@@ -10,6 +10,13 @@ export const cursorSchema = z
   .string()
   .regex(/^(0|[1-9]\d{0,18})$/)
   .refine((v) => BigInt(v) <= 9223372036854775807n, 'Invalid cursor')
+export const inboxFilter = z.enum(['attention', 'mentions', 'all'])
+
+// Reuse the same explicit chat metadata for counters and filtered reads.
+function attentionCondition(message: 'm' | 'msg') {
+  return `(c.kind='direct' OR EXISTS(SELECT 1 FROM message_mentions mm WHERE mm.message_id=${message}.id AND mm.actor_id=$1)
+    OR EXISTS(SELECT 1 FROM messages parent WHERE parent.id=${message}.reply_to AND parent.sender_id=$1))`
+}
 export const sendInput = z
   .object({
     text: z.string().max(20000).default(''),
@@ -114,8 +121,7 @@ export async function listConversations(
       FROM conversation_members m JOIN actors a ON a.id=m.actor_id WHERE m.conversation_id=c.id),'[]') AS members,
     (SELECT left(text,160) FROM messages WHERE conversation_id=c.id ORDER BY seq DESC LIMIT 1) AS preview,
     (SELECT count(*)::int FROM messages msg WHERE msg.conversation_id=c.id AND cm.actor_id IS NOT NULL AND msg.seq>GREATEST(cm.last_read_seq,CASE WHEN $2::boolean THEN cm.dismissed_through_seq ELSE 0 END) AND NOT(cm.read_ranges @> msg.seq::numeric) AND msg.sender_id<>$1
-      AND (c.kind='direct' OR EXISTS(SELECT 1 FROM message_mentions mm WHERE mm.message_id=msg.id AND mm.actor_id=$1)
-      OR EXISTS(SELECT 1 FROM messages parent WHERE parent.id=msg.reply_to AND parent.sender_id=$1))) AS attention,
+      AND ${attentionCondition('msg')}) AS attention,
     (SELECT count(*)::int FROM messages msg WHERE msg.conversation_id=c.id AND cm.actor_id IS NOT NULL AND msg.seq>GREATEST(cm.last_read_seq,CASE WHEN $2::boolean THEN cm.dismissed_through_seq ELSE 0 END) AND NOT(cm.read_ranges @> msg.seq::numeric) AND msg.sender_id<>$1) AS unread
     FROM conversations c LEFT JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.actor_id=$1
     WHERE (cm.actor_id IS NOT NULL OR ($2::boolean AND c.owner_id=$1))
@@ -186,8 +192,7 @@ export async function inbox(actor: Actor) {
     `SELECT c.id,c.name,c.kind,cm.last_read_seq AS after,c.last_seq AS latest,
     (SELECT count(*)::int FROM messages m WHERE m.conversation_id=c.id AND m.seq>cm.last_read_seq AND NOT(cm.read_ranges @> m.seq::numeric) AND m.sender_id<>$1) AS unread,
     (SELECT count(*)::int FROM messages m WHERE m.conversation_id=c.id AND m.seq>cm.last_read_seq AND NOT(cm.read_ranges @> m.seq::numeric) AND m.sender_id<>$1 AND
-      (c.kind='direct' OR EXISTS(SELECT 1 FROM message_mentions mm WHERE mm.message_id=m.id AND mm.actor_id=$1)
-      OR EXISTS(SELECT 1 FROM messages p WHERE p.id=m.reply_to AND p.sender_id=$1))) AS attention
+      ${attentionCondition('m')}) AS attention
     FROM conversation_members cm JOIN conversations c ON c.id=cm.conversation_id
     WHERE cm.actor_id=$1 AND c.last_seq>cm.last_read_seq ORDER BY c.updated_at,c.id LIMIT 200`,
     [actor.id],
@@ -325,6 +330,7 @@ export async function sendMessage(
         id: existing.rows[0].id,
         seq: existing.rows[0].seq,
         duplicate: true,
+        mentions,
       }
     }
     await requireOpenConversation(client, conversationId)
@@ -392,7 +398,7 @@ export async function sendMessage(
         'UPDATE files SET message_id=$1 WHERE id=ANY($2::uuid[])',
         [id, fileIds],
       )
-    return { id, seq: room.last_seq, duplicate: false }
+    return { id, seq: room.last_seq, duplicate: false, mentions }
   })
 }
 
@@ -641,7 +647,19 @@ export async function inviteMembers(
 }
 
 /** Fetch bodies without side effects; clients confirm only the IDs they received. */
-export async function unreadMessages(actor: Actor, count = 30) {
+export async function unreadMessages(
+  actor: Actor,
+  count = 30,
+  filter: z.infer<typeof inboxFilter> = 'all',
+  conversationId?: string,
+) {
+  if (conversationId) await membership(actor, conversationId)
+  const condition =
+    filter === 'attention'
+      ? attentionCondition('m')
+      : filter === 'mentions'
+        ? 'EXISTS(SELECT 1 FROM message_mentions mm WHERE mm.message_id=m.id AND mm.actor_id=$1)'
+        : 'TRUE'
   const rows = await query<
     Message & { conversation_name: string; conversation_kind: string }
   >(
@@ -649,8 +667,9 @@ export async function unreadMessages(actor: Actor, count = 30) {
     JOIN conversation_members mine ON mine.conversation_id=m.conversation_id AND mine.actor_id=$1
     JOIN conversations c ON c.id=m.conversation_id
     WHERE m.sender_id<>$1 AND m.seq>mine.last_read_seq AND NOT(mine.read_ranges @> m.seq::numeric)
+      AND ${condition} AND ($3::uuid IS NULL OR m.conversation_id=$3)
     ORDER BY m.created_at,m.id LIMIT $2`,
-    [actor.id, count + 1],
+    [actor.id, count + 1, conversationId || null],
   )
   const messages = rows.slice(0, count)
   const roomIds = [...new Set(messages.map((m) => m.conversation_id))]
@@ -660,7 +679,13 @@ export async function unreadMessages(actor: Actor, count = 30) {
         [roomIds],
       )
     : []
-  return { messages, conversations, hasMore: rows.length > count }
+  return {
+    messages,
+    conversations,
+    hasMore: rows.length > count,
+    filter,
+    conversationId: conversationId || null,
+  }
 }
 
 /** Dismiss owner notifications through an observed message, without receipts. */

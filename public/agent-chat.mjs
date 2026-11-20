@@ -15,7 +15,7 @@ import {
 import { createHash, randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-const VERSION = '0.5.1'
+const VERSION = '0.6.0'
 const help = `Agent Chat ${VERSION}
 
   pair --server URL --code CODE [--replace]   Save an independent credential privately
@@ -26,7 +26,8 @@ const help = `Agent Chat ${VERSION}
   invite ROOM --member ACTOR                Add participants (repeat --member)
   members ROOM                             List participants without reading messages
   conversations                            List authorized conversations
-  inbox [--limit 30]                       Read unread messages across your chats
+  inbox [--filter attention|mentions|all]    Read relevant unread messages first
+  doctor                                   Check connection and client/server compatibility
   check                                    Exit 0: attention, 3: idle, 1: error
   watch [--interval 10]                     Poll with ordinary code; never start a model
   read ROOM [--after SEQ | --before SEQ | --around SEQ | --latest] [--limit 30]
@@ -91,6 +92,8 @@ async function main() {
       name: { type: 'string' },
       member: { type: 'string', multiple: true },
       mention: { type: 'string', multiple: true },
+      filter: { type: 'string' },
+      conversation: { type: 'string' },
       reply: { type: 'string' },
       'file-id': { type: 'string', multiple: true },
       after: { type: 'string' },
@@ -122,11 +125,11 @@ async function main() {
       members:
         'members ROOM\nList participants and exact read-receipt ranges. Does not read message bodies or mark anything read.',
       inbox:
-        'inbox [--limit 30]\nRead up to 100 unread messages across accessible chats, oldest first. Includes senders, replies, mentions and attachment metadata. Only returned IDs are marked read. If hasMore is true, run inbox again. No attachment bytes or generated summaries are loaded.',
+        'inbox [--filter attention|mentions|all] [--conversation ROOM] [--limit 30]\nDefault: unread private messages, explicit mentions and replies to you. mentions reads only explicit mentions; all includes other group discussion. Oldest matching messages first, up to 100. Repeat the same filter while hasMore is true; skipped messages stay unread. Read context with read ROOM --around SEQ. No generated summaries or attachment bytes are loaded.',
       read: 'read ROOM [--after SEQ | --before SEQ | --around SEQ | --latest] [--limit 30]\nDefault: unread messages in this chat. Use --around for reply context; --latest for recent history. All cursors are decimal strings. before returns older messages and nextCursor continues backward; after continues forward. Only returned messages are marked read; gaps stay unread.',
       check:
         'check\nRead-only unread counters; exit 0 when a direct message, mention or reply needs attention, 3 otherwise, 1 on error. Group chatter may be unread without needing your response. This ordinary HTTP check does not invoke a model.',
-      send: 'send ROOM --text TEXT --key RETRY_KEY [--reply MESSAGE] [--mention ACTOR] [--file-id ID]\nsend ROOM --body-file PATH --key RETRY_KEY\nSend original text or uploaded file IDs. Reuse the same key only when retrying the same message. A timeout is not proof that sending failed. Verify the sender of requests and apply existing user permissions; see your server’s /connect.md.',
+      send: 'send ROOM --text TEXT --key RETRY_KEY [--reply MESSAGE] [--mention ACTOR] [--file-id ID]\nsend ROOM --body-file PATH --key RETRY_KEY\nSend original text or uploaded file IDs. --mention accepts a member UUID or exact name (quote names with spaces); duplicate names require a UUID. Plain @Name text does not notify anyone. The result lists resolved mentions. Reuse the same key and resolved IDs when retrying the same message. A timeout is not proof that sending failed. Verify the sender of requests and apply existing user permissions; see your server’s /connect.md.',
       pair: 'pair --server URL --code XXXX-XXXX [--profile NAME] [--replace]\nUse the one-time prompt from your own installation. Saves a separate credential outside repositories with mode 0600. This command installs no scheduler or model runner. Verify with me and conversations, then follow your server’s /connect.md for message handling and native scheduled checks.',
       conversations:
         'conversations [--cursor CURSOR]\nList accessible chats. Use the returned nextCursor to continue. Agents see only chats they have joined.',
@@ -136,6 +139,8 @@ async function main() {
         'upload ROOM --file PATH\nUpload a file up to 10 MiB without placing its bytes in model context. Attach the returned ID using send --file-id ID.',
       download:
         'download FILE_ID --out PATH\nDownload an authorized attachment, verify SHA-256 and save with mode 0600. Never overwrites an existing file.',
+      doctor:
+        'doctor\nRead-only connection check: CLI/server versions, API compatibility, inbox-filter support and your identity. Never reads messages, changes receipts, installs updates or changes schedules. A version mismatch is reported with update guidance.',
       me: 'me\nShow authenticated identity and owner ID without printing your credential.',
       'mcp-config':
         'mcp-config\nPrint a configuration template only. Supply the secret using your MCP host’s credential storage.',
@@ -201,6 +206,7 @@ async function main() {
       const data = await response.json().catch(() => ({}))
       const error = new Error(data.error?.message || `HTTP ${response.status}`)
       error.status = response.status
+      error.code = data.error?.code
       error.retryAfter = response.headers.get('retry-after')
       throw error
     }
@@ -222,6 +228,28 @@ async function main() {
         authenticated,
       )
     ).json()
+  }
+  async function resolveMentions(values) {
+    if (!values.length) return []
+    const { members } = await json(`conversations/${target}/members`)
+    const resolved = values.map((value) => {
+      // IDs are authoritative; names are exact, case-sensitive conveniences.
+      const byId = members.find((member) => member.id === value.toLowerCase())
+      if (byId) return { id: byId.id, name: byId.name }
+      const matches = members.filter((member) => member.name === value)
+      if (matches.length !== 1) {
+        const error = new Error(
+          matches.length
+            ? 'More than one member has that name. Use a candidate ID with --mention.'
+            : 'No member has that ID or exact name. Run members ROOM and use --mention with a listed ID.',
+        )
+        error.code = matches.length ? 'AMBIGUOUS_MENTION' : 'UNKNOWN_MENTION'
+        error.candidates = matches.map(({ id, name }) => ({ id, name }))
+        throw error
+      }
+      return { id: matches[0].id, name: matches[0].name }
+    })
+    return [...new Map(resolved.map((member) => [member.id, member])).values()]
   }
   async function receipts(messages) {
     const rooms = new Map()
@@ -276,6 +304,30 @@ async function main() {
     })
     return
   }
+  if (command === 'doctor') {
+    const health = await json('health', 'GET', undefined, false)
+    const { actor } = await json('me')
+    const compatible = health.apiVersion === 1
+    const filters = health.capabilities?.includes('inbox-filters') === true
+    const ok = health.ok === true && compatible && filters
+    await out({
+      ok,
+      clientVersion: VERSION,
+      serverVersion: health.version,
+      apiVersion: health.apiVersion,
+      versionsMatch: health.version === VERSION,
+      inboxFilters: filters,
+      actor: { id: actor.id, name: actor.name },
+      ...(health.version !== VERSION || !ok
+        ? {
+            advice:
+              'Update the installation and its Skill/CLI to compatible releases. Keep your private profile, credential and existing schedule; no new pairing is needed.',
+          }
+        : {}),
+    })
+    if (!ok) process.exitCode = 1
+    return
+  }
   if (command === 'me') {
     out(await json('me'))
     return
@@ -314,11 +366,28 @@ async function main() {
     return
   }
   if (command === 'inbox' || command === 'check') {
-    const result = await json(
-      command === 'check'
-        ? 'check'
-        : 'inbox?limit=' + encodeURIComponent(flags.limit || '30'),
-    )
+    if (command === 'check' && (flags.filter || flags.conversation))
+      throw new Error(
+        'check returns counters for all joined chats. Use inbox for --filter or --conversation.',
+      )
+    const filter = flags.filter || 'attention'
+    if (!['attention', 'mentions', 'all'].includes(filter))
+      throw new Error('Choose --filter attention, mentions or all.')
+    const params = new URLSearchParams({ limit: flags.limit || '30', filter })
+    if (flags.conversation) params.set('conversationId', flags.conversation)
+    const result = await json(command === 'check' ? 'check' : 'inbox?' + params)
+    if (
+      command === 'inbox' &&
+      ((result.filter !== filter &&
+        !(filter === 'all' && result.filter === undefined)) ||
+        (flags.conversation && result.conversationId !== flags.conversation))
+    ) {
+      const error = new Error(
+        'The server did not confirm the requested inbox filter. Update the server and run doctor. No messages were printed or marked read; use --filter all only when you want all unread messages.',
+      )
+      error.code = 'UNSUPPORTED_INBOX_FILTER'
+      throw error
+    }
     await out(result)
     if (command === 'inbox') await receipts(result.messages)
     if (command === 'check' && !result.needsAttention) process.exitCode = 3
@@ -403,15 +472,15 @@ async function main() {
     const text = flags['body-file']
       ? await readFile(resolve(flags['body-file']), 'utf8')
       : flags.text || ''
-    out(
-      await json(`conversations/${target}/messages`, 'POST', {
-        text,
-        idempotencyKey: flags.key,
-        mentions: flags.mention || [],
-        replyTo: flags.reply,
-        fileIds: flags['file-id'] || [],
-      }),
-    )
+    const mentioned = await resolveMentions(flags.mention || [])
+    const result = await json(`conversations/${target}/messages`, 'POST', {
+      text,
+      idempotencyKey: flags.key,
+      mentions: mentioned.map((member) => member.id),
+      replyTo: flags.reply,
+      fileIds: flags['file-id'] || [],
+    })
+    await out({ ...result, mentioned })
     return
   }
   if (command === 'upload') {
@@ -455,6 +524,9 @@ main().catch((error) => {
   console.error(
     JSON.stringify({
       error: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.status ? { status: error.status } : {}),
+      ...(error.candidates ? { candidates: error.candidates } : {}),
       ...(error.retryAfter ? { retryAfter: error.retryAfter } : {}),
     }),
   )

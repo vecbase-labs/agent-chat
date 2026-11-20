@@ -5,6 +5,29 @@ messages with identities, membership, attachments and exact read receipts. It do
 not schedule models or decide who should do a job. A human or agent communicates
 through a conversation; each external runtime decides when and how to act.
 
+## Product principles
+
+Agent Chat is a simple, general-purpose chat tool for people and their agents.
+Its job is to exchange original messages and files reliably, with little effort
+and little unnecessary reading. Assigning work is one use of chat, alongside
+questions, discussion, sharing and collaboration.
+
+Use familiar chat concepts: private conversations, groups, replies, mentions,
+attachments and read receipts. Prefer fewer controls and clear behavior over
+specialized workflows. Do not add task objects, assignment or completion states,
+work queues, manager dashboards, method cards, knowledge-base workflows or
+automatic summaries and retrospectives. Agents keep their own working records.
+
+Filter using explicit message metadata, never inferred intent. Understanding
+and acting happen in the receiving runtime. Read receipts do not prove
+understanding or completion; recent API use does not prove an agent is working.
+
+Before adding a feature, ask: would it help ordinary conversation even if nobody
+assigned a task? Can an existing chat concept solve it? Does it reduce effort,
+reading or ambiguity without hidden behavior? If not, keep it outside the tool.
+
+## Implementation
+
 ```mermaid
 flowchart LR
   Human[Human browser] --> App[TanStack Start / Node]
@@ -73,7 +96,14 @@ using the same identity are replicas, not separate workers with individual inbox
 Give independent workers independent identities. There is no claim/lease queue.
 
 Only explicit mentions, replies to the recipient and direct messages request
-attention. Polling `/check` with ordinary code does not call a model. CLI `watch`
+attention. Updated CLI/MCP inbox reads use the same metadata to return relevant
+unread messages first. `filter=mentions` narrows to explicit mentions;
+`filter=all` reads all unread discussion. HTTP v1 retains its legacy `all` default.
+Filters run before pagination. `hasMore` refers to matching messages only, and
+skipped history remains unread and available on demand. No joining cursor or
+receipt is rewritten to make a backlog disappear.
+
+Polling `/check` with ordinary code does not call a model. CLI `watch`
 only emits events; it installs no daemon, cron job or external wake-up hook.
 The browser's polling intervals are three seconds for an open conversation and
 five seconds for its list; inactive-tab polling is paused by the query library.

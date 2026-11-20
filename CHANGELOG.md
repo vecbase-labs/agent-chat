@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0
+
+- Read relevant messages first: updated CLI/MCP inbox defaults to private messages,
+  mentions and replies, with explicit mentions/all filters and optional chat scope.
+  Unrelated history stays unread; raw HTTP v1 keeps its existing default.
+- Mention chat members by exact name in the CLI, with ambiguity errors and resolved
+  recipients in send results. Selected web mentions are highlighted inline.
+- Add read-only CLI connection/version diagnostics, explicit error details and
+  protection against older servers silently ignoring inbox filters.
+- Document a simple, general-purpose chat product: work assignment is a use of
+  conversation, not a task-management model. No schema or schedule changes.
+
 ## 0.5.1
 
 - Show the actual remaining lifetime of a pairing code and stop copying expired or replaced codes. The connection page recognizes when an agent has connected.

@@ -822,6 +822,401 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
     ).toBe(true)
   })
 
+  test('filtered inbox skips a 1,354-message backlog and preserves exact unread gaps', async () => {
+    const reader = await createAgent('Focused reader')
+    const peer = await createAgent('Focused peer')
+    const group = (
+      await request('conversations', {
+        data: {
+          kind: 'group',
+          name: 'Large synthetic backlog',
+          members: [peer.actor.id],
+        },
+      })
+    ).data.id
+    // Synthetic old discussion: use a single fixture insert instead of 1,354 HTTP writes.
+    await adminDb.query(
+      `INSERT INTO messages(id,conversation_id,seq,sender_id,text,idempotency_key,request_hash,created_at)
+      SELECT gen_random_uuid(),$1,n,$2,'Older discussion '||n,'backlog-'||n,'fixture',now()-interval '1 day'+n*interval '1 millisecond'
+      FROM generate_series(1,1354) n`,
+      [group, admin.id],
+    )
+    await adminDb.query('UPDATE conversations SET last_seq=1354 WHERE id=$1', [
+      group,
+    ])
+    await request(`conversations/${group}/members`, {
+      data: { members: [reader.actor.id] },
+    })
+    const send = async (text: string, extra: Payload = {}) =>
+      (
+        await request(`conversations/${group}/messages`, {
+          data: { text, idempotencyKey: randomUUID(), ...extra },
+        })
+      ).data
+    await send('@Focused reader is only text')
+    const mention = await send('Please take a look', {
+      mentions: [reader.actor.id],
+    })
+    await send('For another participant', { mentions: [peer.actor.id] })
+    const own = (
+      await request(`conversations/${group}/messages`, {
+        bearer: reader.token,
+        data: {
+          text: 'My question',
+          idempotencyKey: randomUUID(),
+          mentions: [reader.actor.id],
+        },
+      })
+    ).data
+    const reply = await send('Answer to your question', { replyTo: own.id })
+    const direct = (
+      await request('conversations', {
+        data: { kind: 'direct', members: [reader.actor.id] },
+      })
+    ).data.id
+    const dm = (
+      await request(`conversations/${direct}/messages`, {
+        data: { text: 'Private hello', idempotencyKey: randomUUID() },
+      })
+    ).data
+    const before = (await request('check', { bearer: reader.token })).data
+    expect(before.needsAttention).toBe(true)
+    expect(
+      before.conversations.reduce(
+        (n: number, c: Payload) => n + c.attention,
+        0,
+      ),
+    ).toBe(3)
+    const page = (
+      await request('inbox?filter=attention&limit=1', { bearer: reader.token })
+    ).data
+    expect(page.messages.map((m: Payload) => m.id)).toEqual([mention.id])
+    expect(page.hasMore).toBe(true)
+    expect(page.filter).toBe('attention')
+    expect((await request('check', { bearer: reader.token })).data).toEqual(
+      before,
+    )
+    expect(
+      (await request('inbox?limit=1', { bearer: reader.token })).data
+        .messages[0].text,
+    ).toBe('Older discussion 1')
+    expect(
+      (
+        await request('inbox?filter=mentions', { bearer: reader.token })
+      ).data.messages.map((m: Payload) => m.id),
+    ).toEqual([mention.id])
+    expect(
+      (
+        await request(`inbox?filter=attention&conversationId=${group}`, {
+          bearer: reader.token,
+        })
+      ).data.messages.map((m: Payload) => m.id),
+    ).toEqual([mention.id, reply.id])
+    expect(
+      (await request('inbox?filter=unknown', { bearer: reader.token })).status,
+    ).toBe(400)
+    expect(
+      (await request('inbox?conversationId=bad', { bearer: reader.token }))
+        .status,
+    ).toBe(400)
+    expect(
+      (
+        await request(`inbox?filter=attention&conversationId=${otherRoom}`, {
+          bearer: reader.token,
+        })
+      ).status,
+    ).toBe(404)
+    await request(`conversations/${group}/read`, {
+      bearer: reader.token,
+      data: { messageIds: [mention.id] },
+    })
+    const env = {
+      ...process.env,
+      AGENT_CHAT_SERVER: origin,
+      AGENT_CHAT_TOKEN: reader.token,
+      AGENT_CHAT_CONFIG_DIR: join(filesDir, 'focused-config'),
+    }
+    const run = (...args: string[]) =>
+      execute(process.execPath, ['public/agent-chat.mjs', ...args], { env })
+    const remaining = JSON.parse((await run('inbox')).stdout)
+    expect(remaining.messages.map((m: Payload) => m.id)).toEqual([
+      reply.id,
+      dm.id,
+    ])
+    expect(remaining.hasMore).toBe(false)
+    const idle = await run('check').catch((error) => error)
+    expect(idle.code).toBe(3)
+    const counts = JSON.parse(idle.stdout)
+    expect(counts.needsAttention).toBe(false)
+    expect(counts.unread).toBe(1356)
+    const gaps = (
+      await adminDb.query(
+        'SELECT last_read_seq,read_ranges::text FROM conversation_members WHERE conversation_id=$1 AND actor_id=$2',
+        [group, reader.actor.id],
+      )
+    ).rows[0]
+    expect(gaps.last_read_seq).toBe('0')
+    expect(gaps.read_ranges).not.toBe('{}')
+    const newer = await send('New mention after catch-up', {
+      mentions: [reader.actor.id],
+    })
+    const scoped = JSON.parse(
+      (await run('inbox', '--filter', 'mentions', '--conversation', group))
+        .stdout,
+    )
+    expect(scoped.messages.map((m: Payload) => m.id)).toEqual([newer.id])
+    expect(scoped.conversationId).toBe(group)
+    expect(
+      (
+        await request(`conversations/${group}/messages?around=1356&limit=3`, {
+          bearer: reader.token,
+        })
+      ).data.messages.some((m: Payload) => m.id === mention.id),
+    ).toBe(true)
+    expect(
+      JSON.parse(
+        (await run('inbox', '--filter', 'all', '--limit', '2')).stdout,
+      ).messages.map((m: Payload) => m.text),
+    ).toEqual(['Older discussion 1', 'Older discussion 2'])
+    const doctor = JSON.parse((await run('doctor')).stdout)
+    expect(doctor.ok).toBe(true)
+    expect(doctor.inboxFilters).toBe(true)
+    expect(doctor.versionsMatch).toBe(true)
+    expect(doctor.actor.id).toBe(reader.actor.id)
+    expect(JSON.stringify(doctor)).not.toContain(reader.token)
+    const badAuth = await execute(
+      process.execPath,
+      ['public/agent-chat.mjs', 'check'],
+      { env: { ...env, AGENT_CHAT_TOKEN: 'invalid-test-token' } },
+    ).catch((error) => error)
+    expect(badAuth.code).toBe(1)
+    expect(JSON.parse(badAuth.stderr).status).toBe(401)
+  })
+
+  test('CLI mentions resolve exact member names and reject ambiguous or absent members before sending', async () => {
+    const sender = await createAgent('Mention sender')
+    const unique = await createAgent('Nova Agent')
+    const duplicateA = await createAgent('Same Name')
+    const duplicateB = await createAgent('Same Name')
+    const group = (
+      await request('conversations', {
+        data: {
+          kind: 'group',
+          name: 'Mention resolution',
+          members: [
+            sender.actor.id,
+            unique.actor.id,
+            duplicateA.actor.id,
+            duplicateB.actor.id,
+          ],
+        },
+      })
+    ).data.id
+    const env = {
+      ...process.env,
+      AGENT_CHAT_SERVER: origin,
+      AGENT_CHAT_TOKEN: sender.token,
+      AGENT_CHAT_CONFIG_DIR: join(filesDir, 'mention-config'),
+    }
+    const run = (...args: string[]) =>
+      execute(process.execPath, ['public/agent-chat.mjs', ...args], { env })
+    const key = randomUUID()
+    const args = [
+      'send',
+      group,
+      '--text',
+      'Please review',
+      '--key',
+      key,
+      '--mention',
+      'Nova Agent',
+      '--mention',
+      unique.actor.id,
+    ]
+    const sent = JSON.parse((await run(...args)).stdout)
+    expect(sent.mentions).toEqual([unique.actor.id])
+    expect(sent.mentioned).toEqual([
+      { id: unique.actor.id, name: 'Nova Agent' },
+    ])
+    const retried = JSON.parse((await run(...args)).stdout)
+    expect(retried.id).toBe(sent.id)
+    expect(retried.duplicate).toBe(true)
+    expect(retried.mentions).toEqual(sent.mentions)
+    for (const [name, code] of [
+      ['Same Name', 'AMBIGUOUS_MENTION'],
+      ['nova agent', 'UNKNOWN_MENTION'],
+      ['Nobody here', 'UNKNOWN_MENTION'],
+    ]) {
+      const failed = await run(
+        'send',
+        group,
+        '--text',
+        'Not sent',
+        '--key',
+        randomUUID(),
+        '--mention',
+        name,
+      ).catch((error) => error)
+      expect(failed.code).toBe(1)
+      const error = JSON.parse(failed.stderr)
+      expect(error.code).toBe(code)
+      if (code === 'AMBIGUOUS_MENTION')
+        expect(error.candidates.map((a: Payload) => a.id).sort()).toEqual(
+          [duplicateA.actor.id, duplicateB.actor.id].sort(),
+        )
+    }
+    expect(
+      (
+        await adminDb.query(
+          'SELECT count(*)::int AS n FROM messages WHERE conversation_id=$1',
+          [group],
+        )
+      ).rows[0].n,
+    ).toBe(1)
+    const explicit = JSON.parse(
+      (
+        await run(
+          'send',
+          group,
+          '--text',
+          'Chosen duplicate',
+          '--key',
+          randomUUID(),
+          '--mention',
+          duplicateA.actor.id,
+        )
+      ).stdout,
+    )
+    expect(explicit.mentions).toEqual([duplicateA.actor.id])
+  })
+
+  test('MCP defaults to relevant messages and applies receipts only to the selected filter', async () => {
+    const reader = await createAgent('MCP filtered reader')
+    const group = (
+      await request('conversations', {
+        data: {
+          kind: 'group',
+          name: 'MCP filtering',
+          members: [reader.actor.id],
+        },
+      })
+    ).data.id
+    const send = async (text: string, mentions: string[] = []) =>
+      (
+        await request(`conversations/${group}/messages`, {
+          data: { text, mentions, idempotencyKey: randomUUID() },
+        })
+      ).data
+    const discussion = await send('Ordinary discussion')
+    const mentioned = await send('Explicit mention', [reader.actor.id])
+    const call = async (args: Payload) => {
+      const response = await fetch(origin + '/mcp', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${reader.token}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'inbox', arguments: args },
+        }),
+      })
+      const result = (await response.json()).result
+      expect(result.isError).not.toBe(true)
+      return result.structuredContent
+    }
+    const attention = await call({})
+    expect(attention.filter).toBe('attention')
+    expect(attention.messages.map((m: Payload) => m.id)).toEqual([mentioned.id])
+    expect(attention.hasMore).toBe(false)
+    const ordinary = (await request('inbox', { bearer: reader.token })).data
+    expect(ordinary.messages.map((m: Payload) => m.id)).toEqual([discussion.id])
+    expect(
+      (await call({ filter: 'mentions', conversationId: group })).messages,
+    ).toEqual([])
+    expect(
+      (await call({ filter: 'all', conversationId: group })).messages.map(
+        (m: Payload) => m.id,
+      ),
+    ).toEqual([discussion.id])
+    expect((await request('check', { bearer: reader.token })).data.unread).toBe(
+      0,
+    )
+  })
+
+  test('a new CLI refuses unsupported filters without printing or acknowledging legacy-server messages', async () => {
+    let receipts = 0
+    const legacy = createServer((req, res) => {
+      if (req.method === 'POST') receipts++
+      res.setHeader('Content-Type', 'application/json')
+      if (req.url === '/api/v1/health') {
+        res.end(JSON.stringify({ ok: true, version: '0.5.1', apiVersion: 1 }))
+        return
+      }
+      if (req.url === '/api/v1/me') {
+        res.end(
+          JSON.stringify({ actor: { id: agent.id, name: 'Legacy identity' } }),
+        )
+        return
+      }
+      res.end(
+        JSON.stringify({
+          messages: [
+            {
+              id: randomUUID(),
+              conversation_id: room,
+              text: 'Legacy body must not reach model context',
+            },
+          ],
+          conversations: [],
+          hasMore: false,
+        }),
+      )
+    })
+    await new Promise<void>((resolve) => legacy.listen(0, '127.0.0.1', resolve))
+    try {
+      const address = legacy.address() as { port: number }
+      const env = {
+        ...process.env,
+        AGENT_CHAT_SERVER: `http://127.0.0.1:${address.port}`,
+        AGENT_CHAT_TOKEN: 'synthetic-legacy-token',
+        AGENT_CHAT_CONFIG_DIR: join(filesDir, 'legacy-config'),
+      }
+      for (const args of [
+        ['inbox'],
+        ['inbox', '--filter', 'all', '--conversation', room],
+      ]) {
+        const result = await execute(
+          process.execPath,
+          ['public/agent-chat.mjs', ...args],
+          { env },
+        ).catch((error) => error)
+        expect(result.code).toBe(1)
+        expect(result.stdout).toBe('')
+        expect(JSON.parse(result.stderr).code).toBe('UNSUPPORTED_INBOX_FILTER')
+      }
+      expect(receipts).toBe(0)
+      const diagnosis = await execute(
+        process.execPath,
+        ['public/agent-chat.mjs', 'doctor'],
+        { env },
+      ).catch((error) => error)
+      expect(diagnosis.code).toBe(1)
+      expect(JSON.parse(diagnosis.stdout)).toMatchObject({
+        ok: false,
+        serverVersion: '0.5.1',
+        versionsMatch: false,
+        inboxFilters: false,
+      })
+      expect(receipts).toBe(0)
+    } finally {
+      await new Promise<void>((resolve) => legacy.close(() => resolve()))
+    }
+  })
+
   test('attachments are immutable, scoped and integrity checked', async () => {
     const upload = await fetch(`${origin}/api/v1/conversations/${room}/files`, {
       method: 'POST',
