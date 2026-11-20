@@ -15,6 +15,14 @@ downgrade refusal, and a real database/file backup and restore.
 
 ## Upgrade contract
 
+### Upgrading to 0.5.1
+
+From 0.5.0, deploy the new build and refresh the web page. Schema 6 and API v1
+are unchanged. Existing credentials and schedules remain valid. Pairing pages
+now show actual code status and support renewal; renewing an unused code cannot
+revoke an agent that has already connected. Keep the previous build for rollback
+against the same database and files.
+
 ### Upgrading to 0.5.0
 
 Schema 6 adds nullable `actors.deleted_at` and `conversations.archived_at` fields,

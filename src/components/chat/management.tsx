@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import {
-  Copy,
   Plus,
   RefreshCw,
   Ban,
@@ -25,7 +24,6 @@ import {
   DropdownMenuTrigger,
 } from '#/components/ui/dropdown-menu'
 import { Label } from '#/components/ui/label'
-import { Textarea } from '#/components/ui/textarea'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,28 +37,15 @@ import {
 import { api, post } from '#/lib/api-client'
 import { authClient } from '#/lib/auth-client'
 import { APP_VERSION } from '#/lib/version'
-import {
-  connectionClients,
-  connectionHints,
-  connectionPrompt,
-  DEFAULT_CHECK_INTERVAL_MINUTES,
-} from '#/lib/agent-connection'
-import type { ConnectionClient } from '#/lib/agent-connection'
 import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH } from '#/lib/password-policy'
 import { ChatAvatar } from './avatar'
 import { AvatarPicker } from './avatar-picker'
 import { AppearanceSettings } from './appearance'
 import { AgentActivity } from './agent-activity'
-import { ConnectionInterval } from './connection-interval'
+import { AgentConnection } from './agent-connection'
+import type { Enrollment } from './agent-connection'
 import type { Actor } from '#/lib/types'
 
-type Enrollment = {
-  code: string
-  expiresIn: number
-  server: string
-  agentId: string
-  initialConnection?: boolean
-}
 type Props = {
   mode: 'agents' | 'settings'
   actor: Actor
@@ -88,11 +73,6 @@ export function ManagementPage({
   const [selected, setSelected] = useState<Actor | null>(null)
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
   const [enrollmentName, setEnrollmentName] = useState('')
-  const [checkIntervalMinutes, setCheckIntervalMinutes] = useState<
-    number | null | undefined
-  >(DEFAULT_CHECK_INTERVAL_MINUTES)
-  const [connectionClient, setConnectionClient] =
-    useState<ConnectionClient>('General')
   const [pending, setPending] = useState(false)
   const [confirm, setConfirm] = useState<{
     title: string
@@ -146,8 +126,6 @@ export function ManagementPage({
           )
         }
         setEnrollmentName(name)
-        setConnectionClient('General')
-        setCheckIntervalMinutes(DEFAULT_CHECK_INTERVAL_MINUTES)
         setEnrollment({ ...data, initialConnection: true })
         setCreating(false)
       }
@@ -166,23 +144,6 @@ export function ManagementPage({
           },
     )
   }
-  async function copy(value: string) {
-    try {
-      await navigator.clipboard.writeText(value)
-      toast.success('Copied')
-    } catch {
-      toast.error('Copy is unavailable. Select and copy the text manually.')
-    }
-  }
-  const prompt =
-    enrollment && (!enrollment.code || checkIntervalMinutes !== null)
-      ? connectionPrompt(
-          connectionClient,
-          enrollment,
-          enrollmentName,
-          enrollment.code ? (checkIntervalMinutes ?? undefined) : undefined,
-        )
-      : ''
   const title = enrollment
     ? `${enrollment.code ? 'Connect' : 'Update'} ${enrollmentName}`
     : creating
@@ -207,15 +168,15 @@ export function ManagementPage({
               >
                 {title}
               </h1>
-              <p className="text-base text-muted-foreground">
-                {enrollment
-                  ? 'Copy this message into your agent’s current chat.'
-                  : creating
+              {!enrollment && (
+                <p className="text-base text-muted-foreground">
+                  {creating
                     ? 'Give your agent a name, then connect it.'
                     : mode === 'agents'
                       ? 'Connect your agents. Start a chat or add them to a group anytime.'
                       : 'Make yourself at home.'}
-              </p>
+                </p>
+              )}
             </div>
             {isOwner && mode === 'agents' && !creating && !enrollment && (
               <Button
@@ -237,67 +198,12 @@ export function ManagementPage({
             </p>
           )}
           {enrollment ? (
-            <div className="max-w-2xl space-y-5">
-              <div className="space-y-3">
-                <div
-                  role="group"
-                  aria-label="Agent platform"
-                  className="inline-flex w-full gap-1 rounded-xl bg-muted p-1 sm:w-auto"
-                >
-                  {connectionClients.map((client) => (
-                    <Button
-                      key={client}
-                      variant={
-                        connectionClient === client ? 'outline' : 'ghost'
-                      }
-                      className="min-w-0 flex-1 rounded-lg sm:min-w-24"
-                      aria-pressed={connectionClient === client}
-                      disabled={pending}
-                      onClick={() => setConnectionClient(client)}
-                    >
-                      {client}
-                    </Button>
-                  ))}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {connectionHints[connectionClient]}
-                </p>
-              </div>
-              {enrollment.code && (
-                <ConnectionInterval
-                  key={enrollment.code}
-                  preserveExisting={!enrollment.initialConnection}
-                  onChange={setCheckIntervalMinutes}
-                />
-              )}
-              <Textarea
-                aria-label="Connection prompt"
-                readOnly
-                value={prompt}
-                placeholder="Choose a check interval to generate your connection prompt."
-                className="min-h-32 text-base leading-relaxed"
-              />
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-sm text-muted-foreground">
-                  {enrollment.code
-                    ? 'Expires in 10 minutes · One use'
-                    : 'Keeps your existing connection'}
-                </span>
-                <Button
-                  disabled={!prompt || pending}
-                  onClick={() => copy(prompt)}
-                >
-                  <Copy /> Copy prompt
-                </Button>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                The agent needs access to this server. A localhost address is
-                reachable only from this computer.
-              </p>
-              <Button variant="outline" onClick={() => setEnrollment(null)}>
-                Done
-              </Button>
-            </div>
+            <AgentConnection
+              initialEnrollment={enrollment}
+              name={enrollmentName}
+              onDone={() => setEnrollment(null)}
+              onRefresh={onRefresh}
+            />
           ) : creating ? (
             <form className="max-w-2xl space-y-5" onSubmit={createAgent}>
               <AvatarPicker
@@ -445,7 +351,6 @@ export function ManagementPage({
                               <DropdownMenuItem
                                 onSelect={() => {
                                   setEnrollmentName(a.name)
-                                  setConnectionClient('General')
                                   setEnrollment({
                                     agentId: a.id,
                                     server: window.location.origin,
@@ -470,8 +375,6 @@ export function ManagementPage({
                                       `agents/${a.id}/enrollment`,
                                     )
                                     setEnrollmentName(a.name)
-                                    setConnectionClient('General')
-                                    setCheckIntervalMinutes(undefined)
                                     setEnrollment({
                                       ...data,
                                       initialConnection: false,

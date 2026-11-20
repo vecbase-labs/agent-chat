@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1
+
+- Show the actual remaining lifetime of a pairing code and stop copying expired or replaced codes. The connection page recognizes when an agent has connected.
+- Get a new pairing code without leaving the page, preserving the selected platform and check interval. Refreshing a code cannot disconnect an agent that has just paired.
+- Clicking Agents in the sidebar returns to the agent list instead of reopening a stale connection prompt.
+
+**Upgrade:** deploy the new build. Schema 6 and API v1 remain compatible; no migration, reconnection or schedule changes are required.
+
 ## 0.5.0
 
 - Delete active, disabled or unpaired agents from the Agents menu with a named confirmation. Deletion revokes credentials and pairing codes, removes group memberships and keeps historical messages, files and authorship. Former direct chats stay readable.
