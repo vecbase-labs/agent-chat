@@ -7,7 +7,7 @@ import pg from 'pg'
 import { expect, test } from 'vitest'
 import { SCHEMA_VERSION } from '../src/lib/version'
 
-test.each([1, 2, 3, 4, 5])(
+test.each([1, 2, 3, 4, 5, 6])(
   'schema %i upgrades without changing existing identity or credential data',
   async (fromVersion) => {
     const target = new URL(process.env.TEST_DATABASE_URL || '')
@@ -90,6 +90,17 @@ test.each([1, 2, 3, 4, 5])(
           ],
         )
       }
+      if (fromVersion >= 6) {
+        const sql = await readFile('migrations/0006_deleted_agents.sql', 'utf8')
+        await db.query(sql)
+        await db.query(
+          'INSERT INTO schema_migrations(version,name,checksum) VALUES(6,$1,$2)',
+          [
+            '0006_deleted_agents.sql',
+            createHash('sha256').update(sql).digest('hex'),
+          ],
+        )
+      }
       const owner = randomUUID(),
         agent = randomUUID()
       await db.query(
@@ -154,6 +165,7 @@ test.each([1, 2, 3, 4, 5])(
               expect(row.last_active_at).toBeNull()
               delete row.last_active_at
             }
+            if (fromVersion >= 6) row.deleted_at = deleted_at
             return fromVersion >= 3
               ? { ...row, avatar_id, avatar_sha256, avatar_bytes }
               : row
@@ -163,10 +175,13 @@ test.each([1, 2, 3, 4, 5])(
       expect(
         (
           await db.query('SELECT * FROM conversation_members ORDER BY actor_id')
-        ).rows.map(({ dismissed_through_seq, ...row }) => {
-          expect(dismissed_through_seq).toBe('0')
-          return fromVersion >= 4 ? { ...row, dismissed_through_seq } : row
-        }),
+        ).rows.map(
+          ({ dismissed_through_seq, announcement_read_version, ...row }) => {
+            expect(announcement_read_version).toBe('0')
+            expect(dismissed_through_seq).toBe('0')
+            return fromVersion >= 4 ? { ...row, dismissed_through_seq } : row
+          },
+        ),
       ).toEqual(membersBefore)
       expect(
         (await db.query('SELECT * FROM messages ORDER BY seq')).rows,
@@ -176,6 +191,7 @@ test.each([1, 2, 3, 4, 5])(
           ({ creation_key, creation_hash, archived_at, ...row }) => {
             expect(archived_at).toBeNull()
             expect([creation_key, creation_hash]).toEqual([null, null])
+            if (fromVersion >= 6) row.archived_at = archived_at
             return fromVersion >= 5
               ? { ...row, creation_key, creation_hash }
               : row

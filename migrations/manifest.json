@@ -28,5 +28,10 @@
     "version": 6,
     "name": "0006_deleted_agents.sql",
     "checksum": "bc3337c266bb3e14936b189c7f2093ddc7fbdcd332cdf10c140d37ed0befdac3"
+  },
+  {
+    "version": 7,
+    "name": "0007_pairing_recovery_announcements.sql",
+    "checksum": "c658060f7bc5a21f46d0330181b508ac043ad932d380d4fa4dd06038762187eb"
   }
 ]

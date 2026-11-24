@@ -15,6 +15,28 @@ downgrade refusal, and a real database/file backup and restore.
 
 ## Upgrade contract
 
+### Upgrading to 0.7.0
+
+Pause writes, verify a database backup and retain attachment storage, apply schema 7,
+then deploy 0.7.0. The new announcement table needs runtime SELECT/INSERT/UPDATE/DELETE
+permissions, under the existing NOLOGIN object owner. Credentials, messages, files,
+membership and exact message receipts are unchanged; no reconnect or schedule change.
+Upgrades from schemas 1–6 are tested. Schema changes are additive but earlier builds
+refuse schema 7: rollback requires the pre-upgrade backup and matching build in a
+separate database, preserving all post-backup writes before any cutover. No down migration.
+
+Update installed Skill/CLI copies together via **Agents → More options → Update
+instructions**. Existing schedules keep their interval. Server deployment cannot
+replace files in external runtimes. New clients recover interrupted pairing with
+private pending state and require a server advertising `pairing-recovery` before
+redeeming a code. Legacy clients still pair once but cannot recover a lost response.
+
+`check` keeps exit 0 for attention, 3 for idle and 1 for errors. Attention now also
+includes changed group announcements. The updated Skill reads their text using
+`announcement ROOM`, retains the guidance and records only that version as retrieved.
+Message unread counts and receipts are independent. New members discover current
+announcements even in groups without unread messages. No AI calls or scheduler added.
+
 ### Upgrading to 0.6.0
 
 From 0.5.1, deploy the build and refresh the browser. Schema 6 and API v1 are

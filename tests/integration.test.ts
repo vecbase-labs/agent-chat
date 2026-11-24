@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomUUID, randomBytes } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
@@ -48,6 +48,8 @@ let uploadedFileId: string
 let savedAvatarId: string
 let room: string, otherRoom: string
 const password = 'Test8-ok'
+let dropPairResponses = 0
+let delayPairResponse = false
 const server = createServer(async (req, res) => {
   try {
     const chunks: Buffer[] = []
@@ -65,6 +67,17 @@ const server = createServer(async (req, res) => {
       : url.endsWith('/mcp')
         ? await mcp(incoming)
         : await api(incoming)
+    if (req.url === '/api/v1/pair' && response.ok) {
+      if (delayPairResponse) {
+        delayPairResponse = false
+        await new Promise((resolve) => setTimeout(resolve, 20_200))
+      }
+      if (dropPairResponses > 0) {
+        dropPairResponses--
+        res.destroy()
+        return
+      }
+    }
     res.statusCode = response.status
     response.headers.forEach((value, name) => {
       if (name !== 'set-cookie') res.setHeader(name, value)
@@ -221,6 +234,316 @@ describe('PostgreSQL, authentication, API and agent protocol', () => {
     ).rows[0].token_hash
     expect(stored).not.toBe(token)
     expect(stored).toHaveLength(64)
+  })
+
+  test('pair recovery binds one request, expires, and cannot revive revoked credentials', async () => {
+    const created = (
+      await request('agents', { data: { name: 'Recovery agent' } })
+    ).data
+    const retrySecret = randomBytes(32).toString('base64url')
+    const args = { anonymous: true, data: { code: created.code, retrySecret } }
+    const [first, replay] = await Promise.all([
+      request('pair', args),
+      request('pair', args),
+    ])
+    expect([first.status, replay.status]).toEqual([200, 200])
+    expect(replay.data.token).toBe(first.data.token)
+    expect(first.data.actor.token_hash).toBeUndefined()
+    const stored = (
+      await adminDb.query('SELECT * FROM enrollments WHERE actor_id=$1', [
+        first.data.actor.id,
+      ])
+    ).rows[0]
+    expect(stored.retry_hash).toBe(
+      createHash('sha256').update(retrySecret).digest('hex'),
+    )
+    expect(stored.recovery_ciphertext).not.toContain(first.data.token)
+    expect(stored.recovery_ciphertext).not.toContain(retrySecret)
+    expect(
+      (await request('pair', { anonymous: true, data: { code: created.code } }))
+        .status,
+    ).toBe(400)
+    expect(
+      (
+        await request('pair', {
+          anonymous: true,
+          data: {
+            code: created.code,
+            retrySecret: randomBytes(32).toString('base64url'),
+          },
+        })
+      ).status,
+    ).toBe(400)
+    await adminDb.query(
+      "UPDATE enrollments SET expires_at=now()-interval '1 minute' WHERE actor_id=$1",
+      [first.data.actor.id],
+    )
+    expect((await request('pair', args)).data.token).toBe(first.data.token)
+    expect(
+      (
+        await adminDb.query(
+          'SELECT recovery_until FROM enrollments WHERE actor_id=$1',
+          [first.data.actor.id],
+        )
+      ).rows[0].recovery_until,
+    ).toEqual(stored.recovery_until)
+    await request(`agents/${first.data.actor.id}`, {
+      method: 'PATCH',
+      data: { disabled: true },
+    })
+    await request(`agents/${first.data.actor.id}`, {
+      method: 'PATCH',
+      data: { disabled: false },
+    })
+    expect((await request('pair', args)).status).toBe(400)
+    expect((await request('me', { bearer: first.data.token })).status).toBe(401)
+    const next = (
+      await request(`agents/${first.data.actor.id}/enrollment`, { data: {} })
+    ).data
+    const freshArgs = {
+      anonymous: true,
+      data: { code: next.code, retrySecret },
+    }
+    expect((await request('pair', freshArgs)).status).toBe(200)
+    await adminDb.query(
+      "UPDATE enrollments SET recovery_until=now()-interval '1 second' WHERE actor_id=$1",
+      [first.data.actor.id],
+    )
+    expect((await request('pair', freshArgs)).status).toBe(400)
+    expect(
+      (
+        await adminDb.query(
+          'SELECT recovery_ciphertext FROM enrollments WHERE code_hash=$1',
+          [createHash('sha256').update(next.code).digest('hex')],
+        )
+      ).rows[0].recovery_ciphertext,
+    ).toBeNull()
+  })
+
+  test('competing pairing requests have one winner; reconnect and deletion defeat recovery', async () => {
+    for (const action of ['reconnect', 'delete']) {
+      const created = (
+        await request('agents', {
+          data: { name: 'Competing recovery ' + action },
+        })
+      ).data
+      const secrets = [
+        randomBytes(32).toString('base64url'),
+        randomBytes(32).toString('base64url'),
+      ]
+      const results = await Promise.all(
+        secrets.map((retrySecret) =>
+          request('pair', {
+            anonymous: true,
+            data: { code: created.code, retrySecret },
+          }),
+        ),
+      )
+      expect(results.map((r) => r.status).sort()).toEqual([200, 400])
+      const index = results.findIndex((r) => r.status === 200)
+      const identity = results[index].data.actor.id
+      if (action === 'reconnect')
+        await request(`agents/${identity}/enrollment`, { data: {} })
+      else await request(`agents/${identity}`, { method: 'DELETE' })
+      expect(
+        (
+          await request('pair', {
+            anonymous: true,
+            data: { code: created.code, retrySecret: secrets[index] },
+          })
+        ).status,
+      ).toBe(400)
+      expect(
+        (await request('me', { bearer: results[index].data.token })).status,
+      ).toBe(401)
+    }
+  })
+
+  test('CLI recovers a real 20-second timeout and interrupted retries without new user steps', async () => {
+    const configDir = join(filesDir, 'recovery-cli')
+    const env = { ...process.env, AGENT_CHAT_CONFIG_DIR: configDir }
+    const run = (...args: string[]) =>
+      execute(process.execPath, ['public/agent-chat.mjs', ...args], { env })
+    const created = (
+      await request('agents', { data: { name: 'CLI timeout recovery' } })
+    ).data
+    delayPairResponse = true
+    const args = ['pair', '--server', origin, '--code', created.code]
+    const result = await run(...args)
+    expect(JSON.parse(result.stdout).paired).toBe(true)
+    expect(result.stdout).not.toContain('ac_')
+    const saved = JSON.parse(
+      await readFile(join(configDir, 'default.json'), 'utf8'),
+    )
+    expect((await request('me', { bearer: saved.token })).status).toBe(200)
+    const repeated = await run(...args)
+    expect(JSON.parse(repeated.stdout).actor.id).toBe(saved.actorId)
+    expect(
+      JSON.parse(await readFile(join(configDir, 'default.json'), 'utf8')).token,
+    ).toBe(saved.token)
+    const other = (
+      await request('agents', { data: { name: 'CLI interrupted recovery' } })
+    ).data
+    const otherArgs = [
+      'pair',
+      '--server',
+      origin,
+      '--code',
+      other.code,
+      '--profile',
+      'interrupted',
+    ]
+    dropPairResponses = 3
+    await expect(run(...otherArgs)).rejects.toThrow()
+    dropPairResponses = 0
+    const resumed = await run(...otherArgs)
+    expect(JSON.parse(resumed.stdout).paired).toBe(true)
+    expect((await stat(join(configDir, 'interrupted.json'))).mode & 0o077).toBe(
+      0,
+    )
+  }, 45_000)
+
+  test('announcements reach quiet groups and new members without touching message receipts', async () => {
+    const reader = await createAgent('Announcement reader')
+    const newcomer = await createAgent('Announcement newcomer')
+    const group = (
+      await request('conversations', {
+        data: {
+          kind: 'group',
+          name: 'Quiet announcements',
+          members: [reader.actor.id],
+        },
+      })
+    ).data.id
+    const save = (text: string, version: string) =>
+      request(`conversations/${group}/announcement`, {
+        method: 'PUT',
+        data: { text, version },
+      })
+    expect(
+      (await save('Short messages here. Long details go in files.', '0')).data
+        .version,
+    ).toBe('1')
+    expect(
+      (await save('Short messages here. Long details go in files.', '0')).data
+        .version,
+    ).toBe('1')
+    const check = (await request('check', { bearer: reader.token })).data
+    expect(check.unread).toBe(0)
+    expect(check.needsAttention).toBe(true)
+    expect(check.announcements).toEqual([
+      expect.objectContaining({ conversationId: group, version: '1' }),
+    ])
+    expect(check.announcements[0].text).toBeUndefined()
+    const page = (
+      await request('inbox?filter=mentions', { bearer: reader.token })
+    ).data
+    expect(page.messages).toEqual([])
+    expect(page.announcements).toHaveLength(1)
+    expect(
+      (
+        await request(`conversations/${group}/announcement`, {
+          bearer: newcomer.token,
+        })
+      ).status,
+    ).toBe(404)
+    expect(
+      (
+        await request(`conversations/${group}/announcement`, {
+          bearer: reader.token,
+          method: 'PUT',
+          data: { text: 'Changed', version: '1' },
+        })
+      ).status,
+    ).toBe(403)
+    expect((await save('x'.repeat(2001), '1')).status).toBe(400)
+    expect((await save('New guidance', '0')).status).toBe(409)
+    expect(
+      (
+        await request(`conversations/${group}/announcement`, {
+          bearer: reader.token,
+        })
+      ).data.version,
+    ).toBe('1')
+    expect((await save('New guidance', '1')).data.version).toBe('2')
+    await request(`conversations/${group}/announcement-read`, {
+      bearer: reader.token,
+      data: { version: '1' },
+    })
+    expect(
+      (await request('check', { bearer: reader.token })).data.announcements[0]
+        .version,
+    ).toBe('2')
+    await request(`conversations/${group}/announcement-read`, {
+      bearer: reader.token,
+      data: { version: '2' },
+    })
+    expect(
+      (await request('check', { bearer: reader.token })).data.needsAttention,
+    ).toBe(false)
+    await request(`conversations/${group}/members`, {
+      method: 'POST',
+      data: { members: [newcomer.actor.id] },
+    })
+    expect(
+      (await request('check', { bearer: newcomer.token })).data.announcements[0]
+        .version,
+    ).toBe('2')
+    expect((await save('', '2')).data.version).toBe('3')
+    const mcpResponse = await fetch(origin + '/mcp', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${newcomer.token}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 70,
+        method: 'tools/call',
+        params: { name: 'announcement', arguments: { conversationId: group } },
+      }),
+    })
+    const mcpResult = (await mcpResponse.json()).result
+    expect(mcpResult.isError).toBe(false)
+    expect(mcpResult.structuredContent).toMatchObject({
+      text: '',
+      version: '3',
+    })
+    expect(
+      (await request('check', { bearer: newcomer.token })).data.needsAttention,
+    ).toBe(false)
+    const cliDir = join(filesDir, 'announcement-cli')
+    await (await import('node:fs/promises')).mkdir(cliDir, { recursive: true })
+    await writeFile(
+      join(cliDir, 'default.json'),
+      JSON.stringify({ server: origin, token: reader.token }),
+      { mode: 0o600 },
+    )
+    const result = await execute(
+      process.execPath,
+      ['public/agent-chat.mjs', 'announcement', group],
+      { env: { ...process.env, AGENT_CHAT_CONFIG_DIR: cliDir } },
+    )
+    expect(JSON.parse(result.stdout)).toMatchObject({ text: '', version: '3' })
+    expect(
+      (await request('check', { bearer: reader.token })).data.needsAttention,
+    ).toBe(false)
+    const receipts = (
+      await adminDb.query(
+        'SELECT last_read_seq,read_ranges::text FROM conversation_members WHERE conversation_id=$1 AND actor_id=$2',
+        [group, reader.actor.id],
+      )
+    ).rows[0]
+    expect(receipts).toEqual({ last_read_seq: '0', read_ranges: '{}' })
+    expect(
+      (
+        await adminDb.query(
+          'SELECT count(*)::int AS count FROM messages WHERE conversation_id=$1',
+          [group],
+        )
+      ).rows[0].count,
+    ).toBe(0)
   })
 
   test('short pairing codes are normalized, rate-limited and consumed atomically', async () => {

@@ -10,7 +10,7 @@ Ein Messenger für dich und deine KI-Agenten. Open Source und selbst gehostet.
 
 ![Gruppenchat in Agent Chat](docs/assets/agent-chat.jpg)
 
-**Version: 0.6.0 · Öffentliche Vorschau · Apache-2.0**
+**Version: 0.7.0 · Öffentliche Vorschau · Apache-2.0**
 
 - Private Chats und Gruppen mit @Erwähnungen, Antworten und Lesebestätigungen.
 - Agenten können einander finden, Chats starten und Gruppen zur Zusammenarbeit bilden.

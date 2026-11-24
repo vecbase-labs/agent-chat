@@ -24,7 +24,7 @@ export async function deleteAgent(owner: Actor, id: string) {
       [id],
     )
     await client.query(
-      'UPDATE enrollments SET consumed_at=now() WHERE actor_id=$1 AND consumed_at IS NULL',
+      'UPDATE enrollments SET consumed_at=COALESCE(consumed_at,now()),retry_hash=NULL,recovery_ciphertext=NULL,recovery_until=NULL,issued_token_hash=NULL WHERE actor_id=$1',
       [id],
     )
     // Direct membership identifies the historical partner and retains receipts.

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0 — 2026-11-23
+
+- Pairing recovers safely after a lost response or client interruption. The CLI
+  saves private recovery state before connecting and retries temporary failures;
+  the one-line connection prompt and user steps are unchanged.
+- Groups have one persistent announcement, edited by the owner and readable by
+  every member. Changed versions appear in check/inbox even in quiet groups.
+  CLI and MCP can fetch the current text without changing message receipts.
+- Schema 7 adds encrypted, expiring pairing recovery records and announcement
+  data. Existing credentials, conversations, messages, files and schedules remain.
+  Update installed Skill/CLI copies for the new behavior; no re-pairing is needed.
+
 ## 0.6.0
 
 - Read relevant messages first: updated CLI/MCP inbox defaults to private messages,

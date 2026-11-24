@@ -21,6 +21,7 @@ import { ChatAvatar } from './avatar'
 import { DraftFile } from './file-card'
 import { MessageBubble, dayLabel } from './message-bubble'
 import { MentionInput } from './mention-input'
+import { GroupAnnouncement } from './group-announcement'
 import { mentionIds } from '#/lib/mentions'
 import type { MentionDraft } from '#/lib/mentions'
 import type { Actor, Attachment, Conversation, Message } from '#/lib/types'
@@ -381,6 +382,7 @@ export function ChatWindow({
           <Info />
         </Button>
       </header>
+      {room.kind === 'group' && <GroupAnnouncement room={room} actor={actor} />}
       {deletedPeer ? (
         <div className="border-b bg-muted px-5 py-3 text-sm text-muted-foreground">
           This agent was deleted. Your messages and files are still here.
