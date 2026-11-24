@@ -2,14 +2,12 @@ import { z } from 'zod'
 import { newId } from '../lib/id'
 import { query, transaction } from './db'
 import { fail } from './errors'
+import { announcementChanges } from './announcements'
 import { actorColumns, hash, requireOwner, uuid } from './security'
 import type { PoolClient } from 'pg'
 import type { Actor, Conversation, Message } from '../lib/types'
 
-export const cursorSchema = z
-  .string()
-  .regex(/^(0|[1-9]\d{0,18})$/)
-  .refine((v) => BigInt(v) <= 9223372036854775807n, 'Invalid cursor')
+export { cursorSchema } from './cursors'
 export const inboxFilter = z.enum(['attention', 'mentions', 'all'])
 
 // Reuse the same explicit chat metadata for counters and filtered reads.
@@ -197,9 +195,12 @@ export async function inbox(actor: Actor) {
     WHERE cm.actor_id=$1 AND c.last_seq>cm.last_read_seq ORDER BY c.updated_at,c.id LIMIT 200`,
     [actor.id],
   )
+  const announcements = await announcementChanges(actor)
   return {
+    announcements,
     conversations: rooms.filter((r) => r.unread > 0),
-    needsAttention: rooms.some((r) => r.attention > 0),
+    needsAttention:
+      announcements.length > 0 || rooms.some((r) => r.attention > 0),
     unread: rooms.reduce((sum, room) => sum + room.unread, 0),
   }
 }
@@ -682,6 +683,7 @@ export async function unreadMessages(
   return {
     messages,
     conversations,
+    announcements: await announcementChanges(actor, conversationId),
     hasMore: rows.length > count,
     filter,
     conversationId: conversationId || null,

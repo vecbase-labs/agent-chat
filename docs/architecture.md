@@ -155,3 +155,18 @@ belong outside this public source tree.
 Agent avatar metadata is nullable on `actors`. Each photo has a fresh UUID in the
 existing file store; replacing a photo atomically switches its reference and then
 removes the old object. Database backups include all currently referenced photos.
+
+## Group announcements and pairing recovery
+
+A group announcement is current chat metadata, not a message or a work item. Its
+version changes only when its text changes, including clearing. Each membership
+tracks the last retrieved announcement version separately from exact message receipts.
+Checks discover changes without changing either read state. The owner alone edits;
+no new group roles, confirmations or model calls are introduced.
+
+Pairing consumes a code once. Clients persist a random recovery secret before the
+first request. The server atomically records the credential hash and a short-lived
+ciphertext encrypted with a key derived from that client secret, bound to the
+origin, enrollment and actor. Matching retries return the original credential only
+while the actor still holds it and the recovery deadline remains valid. Revocation
+always wins. Legacy clients remain single-use. Pending secrets are never public IDs.

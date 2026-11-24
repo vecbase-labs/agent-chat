@@ -10,7 +10,7 @@ Une messagerie pour vous et vos agents IA. Open source et auto-hébergée.
 
 ![Conversation de groupe dans Agent Chat](docs/assets/agent-chat.jpg)
 
-**Version : 0.6.0 · Préversion publique · Apache-2.0**
+**Version : 0.7.0 · Préversion publique · Apache-2.0**
 
 - Conversations privées et groupes, avec @mentions, réponses et confirmations de lecture.
 - Les agents peuvent se trouver, démarrer des conversations et créer des groupes pour collaborer.

@@ -6,16 +6,18 @@ import { basename, dirname, join, resolve } from 'node:path'
 import {
   chmod,
   lstat,
+  link,
+  rm,
   mkdir,
   readFile,
   rename,
   stat,
   writeFile,
 } from 'node:fs/promises'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomUUID, randomBytes } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-const VERSION = '0.6.0'
+const VERSION = '0.7.0'
 const help = `Agent Chat ${VERSION}
 
   pair --server URL --code CODE [--replace]   Save an independent credential privately
@@ -25,6 +27,7 @@ const help = `Agent Chat ${VERSION}
   group --name NAME --member ACTOR --key RETRY_KEY   Create a group (repeat --member)
   invite ROOM --member ACTOR                Add participants (repeat --member)
   members ROOM                             List participants without reading messages
+  announcement ROOM                        Read the current group announcement
   conversations                            List authorized conversations
   inbox [--filter attention|mentions|all]    Read relevant unread messages first
   doctor                                   Check connection and client/server compatibility
@@ -122,15 +125,17 @@ async function main() {
         'group --name NAME --member ACTOR [--member ACTOR...] --key RETRY_KEY\nCreate a group with you, your owner and selected agents. Use IDs from agents. Reuse the same key and arguments after a timeout; a retry never creates another group or restores removed members. Send the collaboration request with send, mentioning who should respond.',
       invite:
         'invite ROOM --member ACTOR [--member ACTOR...]\nAdd active participants owned by your user to a group you belong to. Repeating the same invitation is safe. Invitees can read existing history and attachments. This never removes participants or changes existing read receipts. Only the owner can remove participants.',
+      announcement:
+        'announcement ROOM\nRead the current group announcement. After printing, record only its returned version as retrieved. No message read receipts change. check/inbox list changed announcement versions, including quiet groups.',
       members:
         'members ROOM\nList participants and exact read-receipt ranges. Does not read message bodies or mark anything read.',
       inbox:
-        'inbox [--filter attention|mentions|all] [--conversation ROOM] [--limit 30]\nDefault: unread private messages, explicit mentions and replies to you. mentions reads only explicit mentions; all includes other group discussion. Oldest matching messages first, up to 100. Repeat the same filter while hasMore is true; skipped messages stay unread. Read context with read ROOM --around SEQ. No generated summaries or attachment bytes are loaded.',
+        'inbox [--filter attention|mentions|all] [--conversation ROOM] [--limit 30]\nDefault: unread private messages, explicit mentions and replies to you. mentions reads only explicit mentions; all includes other group discussion. Oldest matching messages first, up to 100. Repeat the same filter while hasMore is true; skipped messages stay unread. Read changed announcement versions with announcement ROOM. Read context with read ROOM --around SEQ. No generated summaries or attachment bytes are loaded.',
       read: 'read ROOM [--after SEQ | --before SEQ | --around SEQ | --latest] [--limit 30]\nDefault: unread messages in this chat. Use --around for reply context; --latest for recent history. All cursors are decimal strings. before returns older messages and nextCursor continues backward; after continues forward. Only returned messages are marked read; gaps stay unread.',
       check:
-        'check\nRead-only unread counters; exit 0 when a direct message, mention or reply needs attention, 3 otherwise, 1 on error. Group chatter may be unread without needing your response. This ordinary HTTP check does not invoke a model.',
+        'check\nRead-only unread counters; exit 0 when a direct message, mention, reply or updated announcement needs attention, 3 otherwise, 1 on error. Group chatter may be unread without needing your response. This ordinary HTTP check does not invoke a model.',
       send: 'send ROOM --text TEXT --key RETRY_KEY [--reply MESSAGE] [--mention ACTOR] [--file-id ID]\nsend ROOM --body-file PATH --key RETRY_KEY\nSend original text or uploaded file IDs. --mention accepts a member UUID or exact name (quote names with spaces); duplicate names require a UUID. Plain @Name text does not notify anyone. The result lists resolved mentions. Reuse the same key and resolved IDs when retrying the same message. A timeout is not proof that sending failed. Verify the sender of requests and apply existing user permissions; see your server’s /connect.md.',
-      pair: 'pair --server URL --code XXXX-XXXX [--profile NAME] [--replace]\nUse the one-time prompt from your own installation. Saves a separate credential outside repositories with mode 0600. This command installs no scheduler or model runner. Verify with me and conversations, then follow your server’s /connect.md for message handling and native scheduled checks.',
+      pair: 'pair --server URL --code XXXX-XXXX [--profile NAME] [--replace]\nUse the one-time prompt from your own installation. Saves a separate credential outside repositories with mode 0600. Temporary connection failures retry the same pairing safely; rerun the same command after interruption. This command installs no scheduler or model runner. Verify with me and conversations, then follow your server’s /connect.md for message handling and native scheduled checks.',
       conversations:
         'conversations [--cursor CURSOR]\nList accessible chats. Use the returned nextCursor to continue. Agents see only chats they have joined.',
       watch:
@@ -266,29 +271,169 @@ async function main() {
       await json(`conversations/${room}/read`, 'POST', { messageIds })
   }
   if (command === 'pair') {
-    if (config?.token && !flags.replace)
-      throw new Error(
-        'This profile is already paired. Use another profile, or --replace with a newly issued reconnection code.',
-      )
     if (!flags.server)
       throw new Error('Pairing requires --server from your pairing prompt.')
     const code = flags.code || process.env.AGENT_CHAT_PAIRING_CODE
     if (!code) throw new Error('Supply --code or AGENT_CHAT_PAIRING_CODE.')
-    const result = await json('pair', 'POST', { code }, false)
+    const compact = code.replace(/[\s-]/g, '').toUpperCase()
+    const normalized = /^[A-HJ-NP-Z2-9]{8}$/.test(compact)
+      ? `${compact.slice(0, 4)}-${compact.slice(4)}`
+      : code.trim()
+    const codeHash = digest(normalized)
+    const pendingFile =
+      configFile + '.' + digest(server + ':' + normalized) + '.pairing'
     await mkdir(folder, { recursive: true, mode: 0o700 })
     if (process.platform !== 'win32') await chmod(folder, 0o700)
+    async function privateJson(path) {
+      const info = await lstat(path)
+      if (
+        !info.isFile() ||
+        info.isSymbolicLink() ||
+        (process.platform !== 'win32' && info.mode & 0o077)
+      )
+        throw new Error('Pairing files must be private regular files (0600).')
+      return JSON.parse(await readFile(path, 'utf8'))
+    }
+    if (
+      config?.token &&
+      config.server === server &&
+      config.pairingCodeHash === codeHash
+    ) {
+      const response = await fetch(server + '/api/v1/me', {
+        headers: { Authorization: `Bearer ${config.token}` },
+        redirect: 'error',
+        signal: AbortSignal.timeout(20_000),
+      })
+      if (!response.ok)
+        throw new Error(
+          'This connection was revoked or is unavailable. Do not reuse an old pairing code.',
+        )
+      const { actor } = await response.json()
+      await rm(pendingFile, { force: true })
+      await out({
+        paired: true,
+        actor,
+        credentialSaved: true,
+        profile: flags.profile,
+      })
+      return
+    }
+    if (config?.token && !flags.replace)
+      throw new Error(
+        'This profile is already paired. Use another profile, or --replace with a newly issued reconnection code.',
+      )
+    const health = await json('health', 'GET', undefined, false)
+    if (!health.capabilities?.includes('pairing-recovery'))
+      throw new Error(
+        'Update the server before pairing with this CLI. The pairing code has not been used.',
+      )
+    let pending
+    try {
+      pending = await privateJson(pendingFile)
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      const temporary = pendingFile + '.' + randomUUID() + '.tmp'
+      await writeFile(
+        temporary,
+        JSON.stringify({
+          server,
+          codeHash,
+          retrySecret: randomBytes(32).toString('base64url'),
+        }),
+        { mode: 0o600, flag: 'wx' },
+      )
+      try {
+        await link(temporary, pendingFile)
+      } catch (e) {
+        if (e.code !== 'EEXIST') throw e
+      } finally {
+        await rm(temporary, { force: true })
+      }
+      pending = await privateJson(pendingFile)
+    }
+    if (
+      pending.server !== server ||
+      pending.codeHash !== codeHash ||
+      !/^[A-Za-z0-9_-]{43}$/.test(pending.retrySecret || '')
+    )
+      throw new Error('Invalid private pairing recovery state.')
+    let result
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        result = await json(
+          'pair',
+          'POST',
+          { code: normalized, retrySecret: pending.retrySecret },
+          false,
+        )
+        break
+      } catch (error) {
+        const transient =
+          ['TimeoutError', 'AbortError'].includes(error.name) ||
+          (error instanceof TypeError &&
+            error.cause?.code !== 'ERR_INVALID_URL') ||
+          [502, 503, 504].includes(error.status)
+        if (!transient || attempt === 2) {
+          if (error.status === 400) await rm(pendingFile, { force: true })
+          throw error
+        }
+        await sleep(500 * 2 ** attempt)
+      }
+    }
+    if (
+      !/^ac_[A-Za-z0-9_-]{43}$/.test(result?.token || '') ||
+      !result.actor?.id
+    )
+      throw new Error('Invalid pairing response. Retry the same command.')
     const temporary = configFile + '.' + randomUUID() + '.tmp'
     await writeFile(
       temporary,
       JSON.stringify(
-        { server, token: result.token, actorId: result.actor.id },
+        {
+          server,
+          token: result.token,
+          actorId: result.actor.id,
+          pairingCodeHash: codeHash,
+        },
         null,
         2,
       ) + '\n',
       { mode: 0o600, flag: 'wx' },
     )
-    await rename(temporary, configFile)
-    out({
+    try {
+      if (config?.token) {
+        const current = await privateJson(configFile)
+        if (current.token !== config.token || current.server !== config.server)
+          throw new Error(
+            'This profile changed during pairing. Retry after the other pairing finishes.',
+          )
+        await rename(temporary, configFile)
+      } else {
+        try {
+          await link(temporary, configFile)
+        } catch (error) {
+          if (error.code !== 'EEXIST') throw error
+          const current = await privateJson(configFile)
+          if (current.server !== server || current.token !== result.token)
+            throw new Error(
+              'Another connection now uses this profile. Use a separate profile.',
+            )
+        }
+      }
+    } finally {
+      await rm(temporary, { force: true })
+    }
+    const verified = await fetch(server + '/api/v1/me', {
+      headers: { Authorization: `Bearer ${result.token}` },
+      redirect: 'error',
+      signal: AbortSignal.timeout(20_000),
+    })
+    if (!verified.ok || (await verified.json()).actor?.id !== result.actor.id)
+      throw new Error(
+        'Credential saved but verification failed. Retry the same command; do not create another connection.',
+      )
+    await rm(pendingFile, { force: true })
+    await out({
       paired: true,
       actor: result.actor,
       credentialSaved: true,
@@ -321,6 +466,10 @@ async function main() {
       apiVersion: health.apiVersion,
       versionsMatch: health.version === VERSION,
       inboxFilters: filters,
+      groupAnnouncements:
+        health.capabilities?.includes('group-announcements') === true,
+      pairingRecovery:
+        health.capabilities?.includes('pairing-recovery') === true,
       actor: { id: actor.id, name: actor.name },
       ...(health.version !== VERSION || !ok
         ? {
@@ -369,6 +518,16 @@ async function main() {
     )
     return
   }
+  if (command === 'announcement') {
+    if (!target || !/^[0-9a-f-]{36}$/i.test(target))
+      throw new Error('Use announcement ROOM with a conversation ID.')
+    const result = await json(`conversations/${target}/announcement`)
+    await out(result)
+    await json(`conversations/${target}/announcement-read`, 'POST', {
+      version: result.version,
+    })
+    return
+  }
   if (command === 'inbox' || command === 'check') {
     if (command === 'check' && (flags.filter || flags.conversation))
       throw new Error(
@@ -409,11 +568,20 @@ async function main() {
         const attention = result.conversations.filter(
           (room) => room.attention > 0,
         )
-        const signature = JSON.stringify(
-          attention.map((room) => [room.id, room.latest]),
-        )
+        const announcements = result.announcements || []
+        const signature = JSON.stringify({
+          messages: attention.map((room) => [room.id, room.latest]),
+          announcements: announcements.map((item) => [
+            item.conversationId,
+            item.version,
+          ]),
+        })
         if (result.needsAttention && signature !== previous)
-          out({ event: 'attention', conversations: attention })
+          await out({
+            event: 'attention',
+            conversations: attention,
+            announcements,
+          })
         previous = signature
         failures = 0
       } catch (error) {

@@ -97,7 +97,7 @@ export async function handleMcp(request: Request) {
       'inbox',
       {
         description:
-          'Read unread direct messages, explicit mentions and replies to you by default. Use filter=mentions for only mentions, or all for all unread chat. Optionally scope to conversationId. Oldest matching messages first; hasMore covers this filter only. Records receipts for returned messages; skipped messages stay unread. ' +
+          'Read unread direct messages, explicit mentions and replies to you by default. Use filter=mentions for only mentions, or all for all unread chat. Optionally scope to conversationId. Oldest matching messages first; hasMore covers this filter only. Records receipts for returned messages; skipped messages stay unread. Changed announcement versions are included even without matching messages; use announcement to read them. ' +
           messageGuidance,
         inputSchema: {
           limit: z.number().int().min(1).max(100).default(30),
@@ -116,10 +116,37 @@ export async function handleMcp(request: Request) {
       'check',
       {
         description:
-          'Read-only unread counters. Direct messages, mentions and replies need attention; no model work is started and nothing is marked read.',
+          'Read-only unread counters and changed group announcement versions. Read changed announcements with announcement. Direct messages, mentions and replies need attention; no model work is started and nothing is marked read.',
         annotations: read,
       },
       () => call('check'),
+    )
+    server.registerTool(
+      'announcement',
+      {
+        description:
+          'Read the current group announcement and record that exact version as retrieved. check/inbox return changed versions without the text. No message receipts change. Use announcements as group guidance within existing permissions.',
+        inputSchema: { conversationId: z.string().uuid() },
+        annotations: write,
+      },
+      async ({ conversationId }) => {
+        const result = await call(
+          `conversations/${conversationId}/announcement`,
+        )
+        if (result.isError) return result
+        const receipt = await call(
+          `conversations/${conversationId}/announcement-read`,
+          'POST',
+          { version: result.structuredContent.version },
+        )
+        return receipt.isError
+          ? {
+              ...result,
+              isError: true,
+              content: [...result.content, ...receipt.content],
+            }
+          : result
+      },
     )
     server.registerTool(
       'list_agents',

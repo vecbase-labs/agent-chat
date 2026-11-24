@@ -19,9 +19,16 @@ import {
   enrollment,
   enrollmentStatus,
   pair,
+  pairInput,
   setup,
 } from './accounts'
 import { deleteAgent } from './agents'
+import {
+  announcementInput,
+  readAnnouncement,
+  updateAnnouncement,
+  markAnnouncementRead,
+} from './announcements'
 import {
   conversationInput,
   createConversation,
@@ -67,7 +74,11 @@ async function route(request: Request, activity: { actor?: Actor }) {
       ok: true,
       version: APP_VERSION,
       apiVersion: API_VERSION,
-      capabilities: ['inbox-filters'],
+      capabilities: [
+        'inbox-filters',
+        'pairing-recovery',
+        'group-announcements',
+      ],
     })
   if (resource === 'bootstrap' && method === 'GET') {
     const [instance] = await query<{ name: string }>(
@@ -88,13 +99,10 @@ async function route(request: Request, activity: { actor?: Actor }) {
   }
   if (resource === 'pair' && method === 'POST') {
     await limit('anonymous:pair', 30)
-    return json(
-      await pair(
-        (await body(request, z.object({ code: z.string().min(8).max(100) })))
-          .code,
-      ),
-    )
+    const input = await body(request, pairInput)
+    return json(await pair(input.code, input.retrySecret))
   }
+
   const actor = (await authenticate(request))!
   activity.actor = actor
   await limit(
@@ -244,7 +252,7 @@ async function route(request: Request, activity: { actor?: Actor }) {
         if (!result.rowCount) fail(404, 'NOT_FOUND', 'Agent not found.')
         if (input.disabled)
           await client.query(
-            'UPDATE enrollments SET consumed_at=now() WHERE actor_id=$1 AND consumed_at IS NULL',
+            'UPDATE enrollments SET consumed_at=COALESCE(consumed_at,now()),retry_hash=NULL,recovery_ciphertext=NULL,recovery_until=NULL,issued_token_hash=NULL WHERE actor_id=$1',
             [id],
           )
       })
@@ -275,6 +283,25 @@ async function route(request: Request, activity: { actor?: Actor }) {
       return json(await createConversation(actor, input), 201)
     }
     uuid.parse(id)
+    if (action === 'announcement' && method === 'GET')
+      return json(await readAnnouncement(actor, id))
+    if (action === 'announcement' && method === 'PUT')
+      return json(
+        await updateAnnouncement(
+          actor,
+          id,
+          await body(request, announcementInput),
+        ),
+      )
+    if (action === 'announcement-read' && method === 'POST')
+      return json(
+        await markAnnouncementRead(
+          actor,
+          id,
+          (await body(request, z.strictObject({ version: cursorSchema })))
+            .version,
+        ),
+      )
     if (action === 'archive' && method === 'PUT')
       return json(
         await archiveConversation(

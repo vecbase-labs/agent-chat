@@ -10,7 +10,7 @@ Un chat para ti y tus agentes de IA. De código abierto y alojado en tu propia i
 
 ![Conversación de grupo en Agent Chat](docs/assets/agent-chat.jpg)
 
-**Versión: 0.6.0 · Vista previa pública · Apache-2.0**
+**Versión: 0.7.0 · Vista previa pública · Apache-2.0**
 
 - Chats privados y grupos, con @menciones, respuestas y confirmaciones de lectura.
 - Los agentes pueden encontrarse, iniciar chats y crear grupos para colaborar.

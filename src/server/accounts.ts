@@ -9,6 +9,7 @@ import {
 import { query, transaction } from './db'
 import { actorColumns, hash } from './security'
 import { getEnv } from './env'
+import { openCredential, sealCredential } from './pairing-recovery'
 import { fail } from './errors'
 import type { PoolClient } from 'pg'
 import type { Actor } from '../lib/types'
@@ -107,7 +108,7 @@ export async function enrollment(
         'This agent is connected or disabled. Return to Agents to reconnect it.',
       )
     await client.query(
-      `UPDATE enrollments SET consumed_at=now() WHERE actor_id=$1 AND consumed_at IS NULL`,
+      `UPDATE enrollments SET consumed_at=COALESCE(consumed_at,now()),retry_hash=NULL,recovery_ciphertext=NULL,recovery_until=NULL,issued_token_hash=NULL WHERE actor_id=$1`,
       [agentId],
     )
     if (mode === 'reconnect')
@@ -167,42 +168,90 @@ export async function enrollmentStatus(agentId: string, enrollmentId: string) {
     expiresIn: row.expires_in,
   }
 }
-export async function pair(code: string) {
+export const pairInput = z.object({
+  code: z.string().min(8).max(100),
+  retrySecret: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{43}$/)
+    .optional(),
+})
+
+export async function pair(code: string, retrySecret?: string) {
   code = normalizePairingCode(code)
-  const token = 'ac_' + randomBytes(32).toString('base64url')
+  // Bounded, opportunistic cleanup; expiry is enforced even before cleanup runs.
+  await query(`UPDATE enrollments SET retry_hash=NULL,recovery_ciphertext=NULL,
+    recovery_until=NULL,issued_token_hash=NULL WHERE id IN
+    (SELECT id FROM enrollments WHERE recovery_until<=clock_timestamp() LIMIT 100)`)
   return transaction(async (client) => {
-    // Every credential mutation locks the identity first, then its codes.
-    // This order also applies to reconnect and disable, avoiding a deadlock.
+    const invalid = () =>
+      fail(
+        400,
+        'INVALID_CODE',
+        'The pairing code is invalid, expired, or already used. Get a new code if recovery has expired.',
+      )
     const candidate = await client.query<{ actor_id: string }>(
       'SELECT actor_id FROM enrollments WHERE code_hash=$1',
       [hash(code)],
     )
-    if (!candidate.rows[0])
-      fail(
-        400,
-        'INVALID_CODE',
-        'The pairing code is invalid, expired, or already used.',
-      )
-    await client.query('SELECT id FROM actors WHERE id=$1 FOR UPDATE', [
-      candidate.rows[0].actor_id,
-    ])
-    const { rows } = await client.query<{ actor_id: string }>(
-      `UPDATE enrollments SET consumed_at=now()
-      WHERE code_hash=$1 AND expires_at>now() AND consumed_at IS NULL RETURNING actor_id`,
+    if (!candidate.rows[0]) return invalid()
+    // All credential mutations lock the actor before its enrollments.
+    const current = await client.query<Actor & { token_hash: string | null }>(
+      `SELECT ${actorColumns},token_hash FROM actors WHERE id=$1 AND disabled_at IS NULL AND deleted_at IS NULL FOR UPDATE`,
+      [candidate.rows[0].actor_id],
+    )
+    if (!current.rows[0]) return invalid()
+    const { rows } = await client.query<{
+      id: string
+      consumed_at: Date | null
+      valid: boolean
+      recoverable: boolean
+      retry_hash: string | null
+      recovery_ciphertext: string | null
+      issued_token_hash: string | null
+    }>(
+      `SELECT *,expires_at>clock_timestamp() AS valid,
+      recovery_until>clock_timestamp() AS recoverable FROM enrollments WHERE code_hash=$1 FOR UPDATE`,
       [hash(code)],
     )
-    if (!rows[0])
-      fail(
-        400,
-        'INVALID_CODE',
-        'The pairing code is invalid, expired, or already used.',
+    const grant = rows[0]
+    const { token_hash: currentHash, ...actor } = current.rows[0]
+    const binding = `${getEnv().appUrl}:${grant.id}:${actor.id}`
+    if (grant.consumed_at) {
+      if (
+        !retrySecret ||
+        !grant.recoverable ||
+        grant.retry_hash !== hash(retrySecret) ||
+        !grant.recovery_ciphertext ||
+        !grant.issued_token_hash ||
+        currentHash !== grant.issued_token_hash
       )
-    const agent = await client.query<Actor>(
-      `UPDATE actors SET token_hash=$2
-      WHERE id=$1 AND disabled_at IS NULL RETURNING ${actorColumns}`,
-      [rows[0].actor_id, hash(token)],
+        return invalid()
+      let token: string
+      try {
+        token = openCredential(grant.recovery_ciphertext, retrySecret, binding)
+      } catch {
+        return invalid()
+      }
+      if (hash(token) !== currentHash) return invalid()
+      return { token, actor }
+    }
+    if (!grant.valid) return invalid()
+    const token = 'ac_' + randomBytes(32).toString('base64url')
+    await client.query(
+      `UPDATE enrollments SET consumed_at=clock_timestamp(),retry_hash=$2,
+      recovery_ciphertext=$3,recovery_until=CASE WHEN $2::text IS NULL THEN NULL ELSE clock_timestamp()+interval '10 minutes' END,
+      issued_token_hash=$4 WHERE id=$1`,
+      [
+        grant.id,
+        retrySecret ? hash(retrySecret) : null,
+        retrySecret ? sealCredential(token, retrySecret, binding) : null,
+        retrySecret ? hash(token) : null,
+      ],
     )
-    if (!agent.rows[0]) fail(403, 'DISABLED', 'This agent is disabled.')
-    return { token, actor: agent.rows[0] }
+    await client.query('UPDATE actors SET token_hash=$2 WHERE id=$1', [
+      actor.id,
+      hash(token),
+    ])
+    return { token, actor }
   })
 }
